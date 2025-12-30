@@ -59,6 +59,10 @@
 		settings.set('agent_prompt', prompt);
 	}
 
+	function handleBaPromptChange(prompt: string) {
+		settings.set('ba_prompt', prompt);
+	}
+
 	async function handleSave() {
 		await settings.save();
 	}
@@ -133,11 +137,13 @@
 						triggerStatus={settings.get('trigger_status')}
 						targetStatus={settings.get('target_status')}
 						agentPrompt={settings.get('agent_prompt')}
+						baPrompt={settings.get('ba_prompt')}
 						listId={settings.get('clickup_list_id') || null}
 						onParallelLimitChange={handleParallelLimitChange}
 						onTriggerStatusChange={handleTriggerStatusChange}
 						onTargetStatusChange={handleTargetStatusChange}
 						onAgentPromptChange={handleAgentPromptChange}
+						onBaPromptChange={handleBaPromptChange}
 					/>
 				</div>
 

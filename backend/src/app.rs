@@ -59,6 +59,7 @@ impl Hooks for App {
             .add_route(controllers::git::routes())
             .add_route(controllers::tasks::routes())
             .add_route(controllers::setup::routes())
+            .add_route(controllers::voice::routes())
             .add_route(
                 loco_rs::controller::Routes::new()
                     .add("/ws/tasks/{id}/terminal", axum::routing::get(controllers::ws::terminal_handler))

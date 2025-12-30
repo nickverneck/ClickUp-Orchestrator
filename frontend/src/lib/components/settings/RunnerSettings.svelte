@@ -6,11 +6,13 @@
 		triggerStatus: string;
 		targetStatus: string;
 		agentPrompt: string;
+		baPrompt: string;
 		listId: string | null;
 		onParallelLimitChange: (limit: number) => void;
 		onTriggerStatusChange: (status: string) => void;
 		onTargetStatusChange: (status: string) => void;
 		onAgentPromptChange: (prompt: string) => void;
+		onBaPromptChange: (prompt: string) => void;
 	}
 
 	let {
@@ -18,11 +20,13 @@
 		triggerStatus,
 		targetStatus,
 		agentPrompt,
+		baPrompt,
 		listId,
 		onParallelLimitChange,
 		onTriggerStatusChange,
 		onTargetStatusChange,
-		onAgentPromptChange
+		onAgentPromptChange,
+		onBaPromptChange
 	}: Props = $props();
 
 	let statuses = $state<Status[]>([]);
@@ -182,7 +186,7 @@
 	<!-- Agent Prompt -->
 	<div>
 		<label for="agent-prompt" class="block text-sm font-medium text-gray-700">
-			Agent Prompt (Global Instructions)
+			Coding Agent Prompt (Global Instructions)
 		</label>
 		<div class="mt-1">
 			<textarea
@@ -195,7 +199,33 @@
 			></textarea>
 		</div>
 		<p class="mt-1 text-sm text-gray-500">
-			These instructions will be appended to every task's description when spawning an agent.
+			These instructions will be appended to every task's description when spawning a coding agent.
+		</p>
+	</div>
+
+	<!-- Business Analyst Prompt (Experimental) -->
+	<div class="rounded-lg border-2 border-dashed border-amber-300 bg-amber-50/50 p-4">
+		<div class="flex items-center gap-2 mb-3">
+			<label for="ba-prompt" class="block text-sm font-medium text-gray-700">
+				Business Analyst Prompt
+			</label>
+			<span class="text-[10px] font-medium bg-amber-500/20 text-amber-700 px-1.5 py-0.5 rounded">
+				EXPERIMENTAL
+			</span>
+		</div>
+		<div class="mt-1">
+			<textarea
+				id="ba-prompt"
+				rows="4"
+				value={baPrompt}
+				oninput={(e) => onBaPromptChange((e.target as HTMLTextAreaElement).value)}
+				placeholder="Instructions for the Business Analyst agent that converts voice recordings into actionable tasks..."
+				class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+			></textarea>
+		</div>
+		<p class="mt-2 text-sm text-gray-500">
+			Used by the Voice Assistant to convert spoken requirements and screen context into structured tasks
+			that coding agents can work on.
 		</p>
 	</div>
 
