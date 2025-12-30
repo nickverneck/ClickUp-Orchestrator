@@ -5,6 +5,7 @@
 	import EditorPanel from '$lib/components/editor/EditorPanel.svelte';
 	import type { FileNode, EditorTab } from '$lib/types/editor';
 	import { getSettings } from '$lib/api/settings';
+	import { getFileContent, saveFile } from '$lib/api/files';
 
 	let sidebarCollapsed = $state(false);
 
@@ -41,7 +42,7 @@
 		localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed));
 	});
 
-	function handleFileSelect(path: string, name: string) {
+	async function handleFileSelect(path: string, name: string) {
 		// Check if already open
 		const existingTab = openTabs.find((t) => t.path === path);
 		if (existingTab) {
@@ -49,17 +50,35 @@
 			return;
 		}
 
-		// Open new tab
+		// Create new tab with loading state
+		const tabId = crypto.randomUUID();
 		const newTab: EditorTab = {
-			id: crypto.randomUUID(),
+			id: tabId,
 			path,
 			name,
-			content: '',
+			content: '// Loading...',
 			language: getLanguageFromPath(path),
 			isDirty: false
 		};
 		openTabs = [...openTabs, newTab];
-		activeTabId = newTab.id;
+		activeTabId = tabId;
+
+		// Fetch file content
+		try {
+			const fileData = await getFileContent(path);
+			openTabs = openTabs.map((t) =>
+				t.id === tabId
+					? { ...t, content: fileData.content, language: fileData.language }
+					: t
+			);
+		} catch (e) {
+			console.error('Failed to load file:', e);
+			openTabs = openTabs.map((t) =>
+				t.id === tabId
+					? { ...t, content: `// Error loading file: ${e instanceof Error ? e.message : 'Unknown error'}` }
+					: t
+			);
+		}
 	}
 
 	function handleTabClose(tabId: string) {
@@ -85,15 +104,19 @@
 		unsavedChanges = new Set(unsavedChanges);
 	}
 
-	function handleSave(tabId: string) {
+	async function handleSave(tabId: string) {
 		const tab = openTabs.find((t) => t.id === tabId);
 		if (!tab) return;
 
-		// TODO: Implement save via API
-		console.log('Saving:', tab.path, tab.content);
-		openTabs = openTabs.map((t) => (t.id === tabId ? { ...t, isDirty: false } : t));
-		unsavedChanges.delete(tabId);
-		unsavedChanges = new Set(unsavedChanges);
+		try {
+			await saveFile(tab.path, tab.content);
+			openTabs = openTabs.map((t) => (t.id === tabId ? { ...t, isDirty: false } : t));
+			unsavedChanges.delete(tabId);
+			unsavedChanges = new Set(unsavedChanges);
+		} catch (e) {
+			console.error('Failed to save file:', e);
+			alert(`Failed to save file: ${e instanceof Error ? e.message : 'Unknown error'}`);
+		}
 	}
 
 	function getLanguageFromPath(path: string): string {
