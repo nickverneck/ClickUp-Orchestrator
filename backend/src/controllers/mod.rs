@@ -1,8 +1,10 @@
 pub mod auth;
 pub mod clickup;
+pub mod files;
 pub mod git;
 pub mod settings;
 pub mod setup;
 pub mod tasks;
+pub mod ui_refinements;
 pub mod voice;
 pub mod ws;

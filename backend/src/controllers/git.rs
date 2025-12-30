@@ -264,6 +264,128 @@ async fn detect_path(Json(params): Json<DetectPathRequest>) -> Result<Response> 
     })
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreateBranchRequest {
+    pub path: String,
+    pub branch_name: String,
+    pub base_branch: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateBranchResponse {
+    pub success: bool,
+    pub branch_name: String,
+    pub error: Option<String>,
+}
+
+/// Create a new branch from current HEAD or specified base branch
+#[debug_handler]
+async fn create_branch(Json(params): Json<CreateBranchRequest>) -> Result<Response> {
+    let path = Path::new(&params.path);
+
+    if !path.exists() || !path.is_dir() {
+        return format::json(CreateBranchResponse {
+            success: false,
+            branch_name: params.branch_name.clone(),
+            error: Some("Invalid path".to_string()),
+        });
+    }
+
+    // First, fetch to ensure we have latest refs
+    let _ = Command::new("git")
+        .args(["fetch", "--all"])
+        .current_dir(path)
+        .output();
+
+    // If base_branch is specified, checkout that first
+    if let Some(ref base) = params.base_branch {
+        let checkout_output = Command::new("git")
+            .args(["checkout", base])
+            .current_dir(path)
+            .output();
+
+        if let Ok(output) = checkout_output {
+            if !output.status.success() {
+                return format::json(CreateBranchResponse {
+                    success: false,
+                    branch_name: params.branch_name.clone(),
+                    error: Some(format!(
+                        "Failed to checkout base branch: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    )),
+                });
+            }
+        }
+    }
+
+    // Create and checkout new branch
+    let output = Command::new("git")
+        .args(["checkout", "-b", &params.branch_name])
+        .current_dir(path)
+        .output();
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                format::json(CreateBranchResponse {
+                    success: true,
+                    branch_name: params.branch_name,
+                    error: None,
+                })
+            } else {
+                format::json(CreateBranchResponse {
+                    success: false,
+                    branch_name: params.branch_name,
+                    error: Some(String::from_utf8_lossy(&output.stderr).to_string()),
+                })
+            }
+        }
+        Err(e) => format::json(CreateBranchResponse {
+            success: false,
+            branch_name: params.branch_name,
+            error: Some(format!("Failed to create branch: {}", e)),
+        }),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CheckoutRequest {
+    pub path: String,
+    pub branch_name: String,
+}
+
+/// Checkout an existing branch
+#[debug_handler]
+async fn checkout(Json(params): Json<CheckoutRequest>) -> Result<Response> {
+    let path = Path::new(&params.path);
+
+    if !path.exists() || !path.is_dir() {
+        return format::json(ErrorResponse {
+            error: "Invalid path".to_string(),
+        });
+    }
+
+    let output = Command::new("git")
+        .args(["checkout", &params.branch_name])
+        .current_dir(path)
+        .output();
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                format::json(serde_json::json!({ "success": true }))
+            } else {
+                format::json(ErrorResponse {
+                    error: String::from_utf8_lossy(&output.stderr).to_string(),
+                })
+            }
+        }
+        Err(e) => format::json(ErrorResponse {
+            error: format!("Failed to checkout: {}", e),
+        }),
+    }
+}
+
 pub fn routes() -> Routes {
     Routes::new()
         .prefix("/api/git")
@@ -271,4 +393,6 @@ pub fn routes() -> Routes {
         .add("/branches", get(get_branches))
         .add("/fetch", post(fetch))
         .add("/detect-path", post(detect_path))
+        .add("/create-branch", post(create_branch))
+        .add("/checkout", post(checkout))
 }
