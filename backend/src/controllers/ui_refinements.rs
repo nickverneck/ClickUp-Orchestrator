@@ -306,7 +306,7 @@ pub fn routes() -> Routes {
         .prefix("/api/ui-refinements")
         .add("/session", post(create_session))
         .add("/chat", post(send_chat))
-        .add("/queue/:session_id", get(get_queue_status))
-        .add("/queue/:session_id/:message_id", delete(cancel_queued_message))
+        .add("/queue/{session_id}", get(get_queue_status))
+        .add("/queue/{session_id}/{message_id}", delete(cancel_queued_message))
         .add("/proxy", get(proxy_page))
 }
