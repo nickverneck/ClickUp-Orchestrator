@@ -67,12 +67,23 @@
 		editor?.dispose();
 	});
 
-	// Update content when prop changes (for switching between tabs)
+	// Update content when prop changes (for content loading after initial render)
 	$effect(() => {
-		if (editor && editor.getValue() !== content) {
-			const model = editor.getModel();
-			if (model) {
-				model.setValue(content);
+		// Read content first to ensure Svelte tracks it as a dependency
+		const newContent = content;
+
+		if (editor) {
+			const currentValue = editor.getValue();
+			if (currentValue !== newContent) {
+				const model = editor.getModel();
+				if (model) {
+					// Preserve cursor position
+					const position = editor.getPosition();
+					model.setValue(newContent);
+					if (position) {
+						editor.setPosition(position);
+					}
+				}
 			}
 		}
 	});

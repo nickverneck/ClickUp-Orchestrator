@@ -47,11 +47,13 @@
 	<!-- Editor Content -->
 	<div class="flex-1 overflow-hidden">
 		{#if activeTab}
-			<CodeEditor
-				content={activeTab.content}
-				language={activeTab.language}
-				onContentChange={(content) => onContentChange(activeTab.id, content)}
-			/>
+			{#key activeTab.id}
+				<CodeEditor
+					content={activeTab.content}
+					language={activeTab.language}
+					onContentChange={(content) => onContentChange(activeTab.id, content)}
+				/>
+			{/key}
 		{:else}
 			<div class="h-full flex items-center justify-center bg-gray-900">
 				<div class="text-center text-gray-500">
