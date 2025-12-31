@@ -2,6 +2,8 @@
 	import type { ElementMetadata } from '$lib/types/ui-refinements';
 	import PreviewControls from './PreviewControls.svelte';
 
+	const API_BASE = 'http://localhost:5150';
+
 	interface Props {
 		previewUrl: string;
 		isMobileView: boolean;
@@ -22,7 +24,7 @@
 		onElementSelect
 	}: Props = $props();
 
-	let iframeRef: HTMLIFrameElement;
+	let iframeRef = $state<HTMLIFrameElement | null>(null);
 	let iframeKey = $state(0);
 
 	function handleRefresh() {
@@ -40,9 +42,9 @@
 		return () => window.removeEventListener('message', handleMessage);
 	});
 
-	// Build the proxied URL when highlight mode is on
+	// Build the proxied URL when highlight mode is on - use backend for proxy
 	let displayUrl = $derived(
-		highlightMode ? `/api/ui-refinements/proxy?url=${encodeURIComponent(previewUrl)}` : previewUrl
+		highlightMode ? `${API_BASE}/api/ui-refinements/proxy?url=${encodeURIComponent(previewUrl)}` : previewUrl
 	);
 </script>
 

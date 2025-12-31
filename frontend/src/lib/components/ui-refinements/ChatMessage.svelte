@@ -7,7 +7,7 @@
 
 	let { message }: Props = $props();
 
-	const isUser = message.role === 'user';
+	let isUser = $derived(message.role === 'user');
 </script>
 
 <div class="flex {isUser ? 'justify-end' : 'justify-start'}">

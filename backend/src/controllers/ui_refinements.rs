@@ -160,17 +160,35 @@ async fn proxy_page(Query(params): Query<ProxyQuery>) -> Result<Response> {
 
             match response.text().await {
                 Ok(html) => {
-                    // Inject the highlight script before </body>
+                    // Inject a base tag to make relative URLs work, and the highlight script
+                    let base_tag = format!("<base href=\"{}\" />", params.url);
                     let highlight_script = get_highlight_script();
-                    let modified_html = if html.contains("</body>") {
-                        html.replace("</body>", &format!("{}</body>", highlight_script))
+
+                    // Inject base tag after <head> and script before </body>
+                    let mut modified_html = html.clone();
+
+                    // Add base tag
+                    if modified_html.contains("<head>") {
+                        modified_html = modified_html.replace("<head>", &format!("<head>{}", base_tag));
+                    } else if modified_html.contains("<HEAD>") {
+                        modified_html = modified_html.replace("<HEAD>", &format!("<HEAD>{}", base_tag));
+                    }
+
+                    // Add highlight script
+                    if modified_html.contains("</body>") {
+                        modified_html = modified_html.replace("</body>", &format!("{}</body>", highlight_script));
+                    } else if modified_html.contains("</BODY>") {
+                        modified_html = modified_html.replace("</BODY>", &format!("{}</BODY>", highlight_script));
                     } else {
-                        format!("{}{}", html, highlight_script)
-                    };
+                        modified_html = format!("{}{}", modified_html, highlight_script);
+                    }
 
                     Ok(Response::builder()
                         .status(200)
-                        .header("Content-Type", "text/html")
+                        .header("Content-Type", "text/html; charset=utf-8")
+                        .header("Access-Control-Allow-Origin", "*")
+                        .header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                        .header("Access-Control-Allow-Headers", "Content-Type")
                         .body(modified_html.into())?)
                 }
                 Err(e) => format::json(ErrorResponse {
