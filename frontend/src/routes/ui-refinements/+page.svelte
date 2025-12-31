@@ -92,16 +92,7 @@
 
 	function handleWsMessage(msg: SessionWsMessage) {
 		if (msg.type === 'output') {
-			// Append output to current assistant message
-			if (currentAssistantMessageId) {
-				messages = messages.map((m) =>
-					m.id === currentAssistantMessageId
-						? { ...m, content: m.content + msg.line + '\n' }
-						: m
-				);
-			}
-
-			// Check if process exited
+			// Check if process exited (don't show this message to user)
 			if (msg.line.includes('[Process exited with code')) {
 				// Mark message as completed and process next
 				if (currentAssistantMessageId) {
@@ -112,6 +103,16 @@
 				currentAssistantMessageId = null;
 				isProcessing = false;
 				processNextInQueue();
+				return;
+			}
+
+			// Append output to current assistant message
+			if (currentAssistantMessageId) {
+				messages = messages.map((m) =>
+					m.id === currentAssistantMessageId
+						? { ...m, content: m.content + msg.line + '\n' }
+						: m
+				);
 			}
 		} else if (msg.type === 'error') {
 			// Show error message
