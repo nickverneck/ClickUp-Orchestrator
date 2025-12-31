@@ -65,6 +65,7 @@ impl Hooks for App {
             .add_route(
                 loco_rs::controller::Routes::new()
                     .add("/ws/tasks/{id}/terminal", axum::routing::get(controllers::ws::terminal_handler))
+                    .add("/ws/ui-refinements/{session_id}", axum::routing::get(controllers::ws::session_terminal_handler))
             )
     }
     async fn connect_workers(ctx: &AppContext, queue: &Queue) -> Result<()> {

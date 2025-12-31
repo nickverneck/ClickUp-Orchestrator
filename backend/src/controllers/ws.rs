@@ -1,6 +1,6 @@
 //! WebSocket controller for terminal streaming
 
-use crate::services::process_manager::{OutputLine, PROCESS_MANAGER};
+use crate::services::process_manager::{OutputLine, SessionOutputLine, PROCESS_MANAGER};
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -92,6 +92,159 @@ async fn handle_socket(socket: WebSocket, task_id: i32) {
                             }
                             WsMessage::Kill => {
                                 if let Err(e) = PROCESS_MANAGER.kill_process(task_id).await {
+                                    tracing::error!("Failed to kill process: {}", e);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(Message::Close(_)) => break,
+                Err(_) => break,
+                _ => {}
+            }
+        }
+    });
+
+    // Wait for either task to complete
+    tokio::select! {
+        _ = send_task => {}
+        _ = recv_task => {}
+    }
+}
+
+// ============ UI Refinements Session WebSocket ============
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum SessionWsMessage {
+    #[serde(rename = "output")]
+    Output { line: String, is_stderr: bool },
+    #[serde(rename = "spawn")]
+    Spawn {
+        prompt: String,
+        agent: String,
+        worktree_path: String,
+    },
+    #[serde(rename = "input")]
+    Input { data: String },
+    #[serde(rename = "kill")]
+    Kill,
+    #[serde(rename = "error")]
+    Error { message: String },
+    #[serde(rename = "connected")]
+    Connected { session_id: String, is_running: bool },
+    #[serde(rename = "spawned")]
+    Spawned { pid: u32 },
+}
+
+pub async fn session_terminal_handler(
+    ws: WebSocketUpgrade,
+    Path(session_id): Path<String>,
+) -> Response {
+    ws.on_upgrade(move |socket| handle_session_socket(socket, session_id))
+}
+
+async fn handle_session_socket(socket: WebSocket, session_id: String) {
+    let (mut sender, mut receiver) = socket.split();
+
+    // Check if process is running
+    let is_running = PROCESS_MANAGER.is_session_running(&session_id);
+
+    // Send connected message
+    let connected_msg = serde_json::to_string(&SessionWsMessage::Connected {
+        session_id: session_id.clone(),
+        is_running,
+    })
+    .unwrap_or_default();
+    if sender.send(Message::Text(connected_msg.into())).await.is_err() {
+        return;
+    }
+
+    // Subscribe to process output
+    let mut output_rx: broadcast::Receiver<SessionOutputLine> =
+        PROCESS_MANAGER.subscribe_session_output();
+
+    let session_id_send = session_id.clone();
+
+    // Spawn task to forward output to WebSocket
+    let send_task = tokio::spawn(async move {
+        loop {
+            match output_rx.recv().await {
+                Ok(output) => {
+                    if output.session_id == session_id_send {
+                        let msg = SessionWsMessage::Output {
+                            line: output.line,
+                            is_stderr: output.is_stderr,
+                        };
+                        if let Ok(json) = serde_json::to_string(&msg) {
+                            if sender.send(Message::Text(json.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    continue;
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    break;
+                }
+            }
+        }
+    });
+
+    let session_id_recv = session_id.clone();
+
+    // Handle incoming messages
+    let recv_task = tokio::spawn(async move {
+        while let Some(result) = receiver.next().await {
+            match result {
+                Ok(Message::Text(text)) => {
+                    if let Ok(msg) = serde_json::from_str::<SessionWsMessage>(&text) {
+                        match msg {
+                            SessionWsMessage::Spawn {
+                                prompt,
+                                agent,
+                                worktree_path,
+                            } => {
+                                match PROCESS_MANAGER
+                                    .spawn_session_agent(
+                                        &session_id_recv,
+                                        &prompt,
+                                        &worktree_path,
+                                        &agent,
+                                    )
+                                    .await
+                                {
+                                    Ok(pid) => {
+                                        tracing::info!(
+                                            "Spawned {} agent for session {} with PID {}",
+                                            agent,
+                                            session_id_recv,
+                                            pid
+                                        );
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            "Failed to spawn agent for session {}: {}",
+                                            session_id_recv,
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+                            SessionWsMessage::Input { data } => {
+                                if let Err(e) =
+                                    PROCESS_MANAGER.send_session_input(&session_id_recv, &data).await
+                                {
+                                    tracing::error!("Failed to send input: {}", e);
+                                }
+                            }
+                            SessionWsMessage::Kill => {
+                                if let Err(e) =
+                                    PROCESS_MANAGER.kill_session_process(&session_id_recv).await
+                                {
                                     tracing::error!("Failed to kill process: {}", e);
                                 }
                             }

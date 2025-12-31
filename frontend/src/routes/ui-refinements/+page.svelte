@@ -1,10 +1,12 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import BranchProtectionOverlay from '$lib/components/ui-refinements/BranchProtectionOverlay.svelte';
 	import ChatPanel from '$lib/components/ui-refinements/ChatPanel.svelte';
 	import PreviewPanel from '$lib/components/ui-refinements/PreviewPanel.svelte';
 	import type { ChatMessage, QueuedMessage, ElementMetadata } from '$lib/types/ui-refinements';
+	import { UIRefinementsWebSocket, type SessionWsMessage } from '$lib/api/ui-refinements-ws';
+	import { getSettings } from '$lib/api/settings';
 
 	let sidebarCollapsed = $state(false);
 
@@ -12,11 +14,17 @@
 	let branchCreated = $state(false);
 	let currentBranch = $state<string | null>(null);
 
+	// Session state
+	let sessionId = $state<string | null>(null);
+	let wsClient = $state<UIRefinementsWebSocket | null>(null);
+	let targetRepoPath = $state<string>('');
+
 	// Chat state
 	let messages = $state<ChatMessage[]>([]);
 	let messageQueue = $state<QueuedMessage[]>([]);
 	let isProcessing = $state(false);
 	let selectedAgent = $state<'claude' | 'codex' | 'gemini'>('claude');
+	let currentAssistantMessageId = $state<string | null>(null);
 
 	// Preview state
 	let previewUrl = $state('http://localhost:5173');
@@ -27,7 +35,7 @@
 	// Project state
 	let selectedProject = $state<string | null>(null);
 
-	onMount(() => {
+	onMount(async () => {
 		const saved = localStorage.getItem('sidebarCollapsed');
 		if (saved !== null) {
 			sidebarCollapsed = saved === 'true';
@@ -37,6 +45,20 @@
 		if (savedPreviewUrl) {
 			previewUrl = savedPreviewUrl;
 		}
+
+		// Load target repo path from settings
+		try {
+			const settings = await getSettings();
+			if (settings.target_repo_path) {
+				targetRepoPath = settings.target_repo_path;
+			}
+		} catch (e) {
+			console.error('Failed to load settings:', e);
+		}
+	});
+
+	onDestroy(() => {
+		wsClient?.disconnect();
 	});
 
 	$effect(() => {
@@ -50,6 +72,68 @@
 	function handleBranchCreate(branchName: string) {
 		currentBranch = branchName;
 		branchCreated = true;
+
+		// Create a new session ID and connect WebSocket
+		sessionId = crypto.randomUUID();
+		connectWebSocket();
+	}
+
+	function connectWebSocket() {
+		if (!sessionId) return;
+
+		wsClient = new UIRefinementsWebSocket(
+			sessionId,
+			handleWsMessage,
+			handleWsClose,
+			handleWsConnect
+		);
+		wsClient.connect();
+	}
+
+	function handleWsMessage(msg: SessionWsMessage) {
+		if (msg.type === 'output') {
+			// Append output to current assistant message
+			if (currentAssistantMessageId) {
+				messages = messages.map((m) =>
+					m.id === currentAssistantMessageId
+						? { ...m, content: m.content + msg.line + '\n' }
+						: m
+				);
+			}
+
+			// Check if process exited
+			if (msg.line.includes('[Process exited with code')) {
+				// Mark message as completed and process next
+				if (currentAssistantMessageId) {
+					messages = messages.map((m) =>
+						m.id === currentAssistantMessageId ? { ...m, status: 'completed' as const } : m
+					);
+				}
+				currentAssistantMessageId = null;
+				isProcessing = false;
+				processNextInQueue();
+			}
+		} else if (msg.type === 'error') {
+			// Show error message
+			if (currentAssistantMessageId) {
+				messages = messages.map((m) =>
+					m.id === currentAssistantMessageId
+						? { ...m, content: m.content + `\nError: ${msg.message}`, status: 'error' as const }
+						: m
+				);
+			}
+			currentAssistantMessageId = null;
+			isProcessing = false;
+			processNextInQueue();
+		}
+	}
+
+	function handleWsClose() {
+		console.log('WebSocket closed');
+	}
+
+	function handleWsConnect(isRunning: boolean) {
+		console.log('WebSocket connected, isRunning:', isRunning);
 	}
 
 	function handleElementSelect(element: ElementMetadata) {
@@ -90,23 +174,59 @@
 		selectedElement = null;
 	}
 
+	function buildPrompt(message: ChatMessage): string {
+		let prompt = message.content;
+
+		// Add element context if present
+		if (message.elementContext) {
+			const ctx = message.elementContext;
+			prompt += `\n\n[Element Context]\nTag: ${ctx.tagName}`;
+			if (ctx.id) prompt += `\nID: ${ctx.id}`;
+			if (ctx.classList.length > 0) prompt += `\nClasses: ${ctx.classList.join(' ')}`;
+			if (ctx.cssSelector) prompt += `\nCSS Selector: ${ctx.cssSelector}`;
+			if (ctx.textContent) prompt += `\nText Content: ${ctx.textContent}`;
+		}
+
+		return prompt;
+	}
+
 	async function processMessage(message: ChatMessage) {
-		// TODO: Implement WebSocket communication with backend
-		// For now, simulate a response
-		setTimeout(() => {
+		if (!wsClient || !targetRepoPath) {
+			// Fallback if not connected
 			messages = [
 				...messages,
 				{
 					id: crypto.randomUUID(),
 					role: 'assistant',
-					content: `Processing your request with ${selectedAgent}...`,
+					content: 'Error: Not connected to backend or no target repository configured.',
 					timestamp: Date.now(),
-					status: 'completed'
+					status: 'error'
 				}
 			];
 			isProcessing = false;
 			processNextInQueue();
-		}, 2000);
+			return;
+		}
+
+		// Create assistant message placeholder
+		const assistantId = crypto.randomUUID();
+		currentAssistantMessageId = assistantId;
+		messages = [
+			...messages,
+			{
+				id: assistantId,
+				role: 'assistant',
+				content: '',
+				timestamp: Date.now(),
+				status: 'processing'
+			}
+		];
+
+		// Build the prompt with element context
+		const prompt = buildPrompt(message);
+
+		// Spawn the agent via WebSocket
+		wsClient.spawnAgent(prompt, selectedAgent, targetRepoPath);
 	}
 
 	function processNextInQueue() {
