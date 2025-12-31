@@ -296,15 +296,35 @@ impl ProcessManager {
             ));
         }
 
-        // Determine which CLI to use based on agent type
-        let (cmd, args) = match agent_type {
+        tracing::info!(
+            "Spawning {} agent for session {} in worktree: {}",
+            agent_type,
+            session_id,
+            worktree_path
+        );
+        tracing::info!("Prompt: {}", prompt);
+
+        // Spawn the agent based on type
+        let mut child = match agent_type {
             "claude" => {
                 // Check if claude command is available
                 let claude_check = Command::new("which").arg("claude").output().await;
                 if claude_check.is_err() || !claude_check.unwrap().status.success() {
                     return Err("The 'claude' command is not found in PATH.".to_string());
                 }
-                ("script", vec!["-q", "/dev/null", "claude", "-p", prompt, "--dangerously-skip-permissions"])
+                Command::new("script")
+                    .arg("-q")
+                    .arg("/dev/null")
+                    .arg("claude")
+                    .arg("-p")
+                    .arg(prompt)
+                    .arg("--dangerously-skip-permissions")
+                    .current_dir(worktree_path)
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| format!("Failed to spawn claude process: {}", e))?
             }
             "codex" => {
                 // Check if codex command is available
@@ -312,7 +332,17 @@ impl ProcessManager {
                 if codex_check.is_err() || !codex_check.unwrap().status.success() {
                     return Err("The 'codex' command is not found in PATH.".to_string());
                 }
-                ("script", vec!["-q", "/dev/null", "codex", prompt])
+                Command::new("script")
+                    .arg("-q")
+                    .arg("/dev/null")
+                    .arg("codex")
+                    .arg(prompt)
+                    .current_dir(worktree_path)
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| format!("Failed to spawn codex process: {}", e))?
             }
             "gemini" => {
                 // Check if gemini command is available
@@ -320,19 +350,20 @@ impl ProcessManager {
                 if gemini_check.is_err() || !gemini_check.unwrap().status.success() {
                     return Err("The 'gemini' command is not found in PATH.".to_string());
                 }
-                ("script", vec!["-q", "/dev/null", "gemini", prompt])
+                Command::new("script")
+                    .arg("-q")
+                    .arg("/dev/null")
+                    .arg("gemini")
+                    .arg(prompt)
+                    .current_dir(worktree_path)
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| format!("Failed to spawn gemini process: {}", e))?
             }
             _ => return Err(format!("Unknown agent type: {}", agent_type)),
         };
-
-        let mut child = Command::new(cmd)
-            .args(&args)
-            .current_dir(worktree_path)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to spawn {} process: {}", agent_type, e))?;
 
         let pid = child.id();
 
