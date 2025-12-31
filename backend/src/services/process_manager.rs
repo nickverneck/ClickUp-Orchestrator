@@ -332,11 +332,10 @@ impl ProcessManager {
                 if codex_check.is_err() || !codex_check.unwrap().status.success() {
                     return Err("The 'codex' command is not found in PATH.".to_string());
                 }
-                Command::new("script")
-                    .arg("-q")
-                    .arg("/dev/null")
-                    .arg("codex")
+                Command::new("codex")
+                    .arg("exec")
                     .arg(prompt)
+                    .arg("--full-auto")
                     .current_dir(worktree_path)
                     .stdin(std::process::Stdio::piped())
                     .stdout(std::process::Stdio::piped())
@@ -350,11 +349,9 @@ impl ProcessManager {
                 if gemini_check.is_err() || !gemini_check.unwrap().status.success() {
                     return Err("The 'gemini' command is not found in PATH.".to_string());
                 }
-                Command::new("script")
-                    .arg("-q")
-                    .arg("/dev/null")
-                    .arg("gemini")
+                Command::new("gemini")
                     .arg(prompt)
+                    .arg("-y")
                     .current_dir(worktree_path)
                     .stdin(std::process::Stdio::piped())
                     .stdout(std::process::Stdio::piped())
