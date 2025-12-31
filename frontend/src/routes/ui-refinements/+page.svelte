@@ -170,7 +170,7 @@
 			{/if}
 
 			<!-- Chat Panel - Left Side -->
-			<div class="w-2/5 border-r border-gray-200 flex flex-col bg-white {!branchCreated ? 'blur-sm pointer-events-none' : ''}">
+			<div class="w-1/5 min-w-[280px] border-r border-gray-200 flex flex-col bg-white {!branchCreated ? 'blur-sm pointer-events-none' : ''}">
 				<ChatPanel
 					{messages}
 					{messageQueue}
