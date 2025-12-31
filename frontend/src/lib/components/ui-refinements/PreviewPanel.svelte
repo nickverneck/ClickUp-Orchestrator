@@ -2,8 +2,6 @@
 	import type { ElementMetadata } from '$lib/types/ui-refinements';
 	import PreviewControls from './PreviewControls.svelte';
 
-	const API_BASE = 'http://localhost:5150';
-
 	interface Props {
 		previewUrl: string;
 		isMobileView: boolean;
@@ -27,25 +25,61 @@
 	let iframeRef = $state<HTMLIFrameElement | null>(null);
 	let iframeKey = $state(0);
 
+	// Manual element selector state
+	let showManualSelector = $state(false);
+	let manualTagName = $state('');
+	let manualClasses = $state('');
+	let manualId = $state('');
+	let manualDescription = $state('');
+
 	function handleRefresh() {
 		iframeKey++;
 	}
 
-	function handleMessage(event: MessageEvent) {
-		if (event.data?.type === 'element-selected') {
-			onElementSelect(event.data.metadata);
-		}
+	function handleOverlayClick() {
+		showManualSelector = true;
 	}
 
-	$effect(() => {
-		window.addEventListener('message', handleMessage);
-		return () => window.removeEventListener('message', handleMessage);
-	});
+	function handleManualSelect() {
+		if (!manualTagName.trim()) return;
 
-	// Build the proxied URL when highlight mode is on - use backend for proxy
-	let displayUrl = $derived(
-		highlightMode ? `${API_BASE}/api/ui-refinements/proxy?url=${encodeURIComponent(previewUrl)}` : previewUrl
-	);
+		const metadata: ElementMetadata = {
+			tagName: manualTagName.trim().toLowerCase(),
+			id: manualId.trim() || undefined,
+			classList: manualClasses.trim() ? manualClasses.trim().split(/\s+/) : [],
+			attributes: {},
+			textContent: manualDescription.trim() || undefined,
+			xpath: '',
+			cssSelector: buildCssSelector()
+		};
+
+		onElementSelect(metadata);
+		resetManualForm();
+		onHighlightToggle(); // Turn off highlight mode
+	}
+
+	function buildCssSelector(): string {
+		let selector = manualTagName.trim().toLowerCase();
+		if (manualId.trim()) {
+			selector += `#${manualId.trim()}`;
+		}
+		if (manualClasses.trim()) {
+			selector += '.' + manualClasses.trim().split(/\s+/).join('.');
+		}
+		return selector;
+	}
+
+	function resetManualForm() {
+		showManualSelector = false;
+		manualTagName = '';
+		manualClasses = '';
+		manualId = '';
+		manualDescription = '';
+	}
+
+	function handleCancelManual() {
+		resetManualForm();
+	}
 </script>
 
 <div class="flex flex-col h-full">
@@ -61,9 +95,9 @@
 	/>
 
 	<!-- Preview Container -->
-	<div class="flex-1 p-4 overflow-hidden">
+	<div class="flex-1 p-4 overflow-hidden relative">
 		<div
-			class="h-full bg-white rounded-lg shadow-lg overflow-hidden mx-auto transition-all duration-300 {isMobileView
+			class="h-full bg-white rounded-lg shadow-lg overflow-hidden mx-auto transition-all duration-300 relative {isMobileView
 				? 'max-w-[375px]'
 				: 'w-full'}"
 		>
@@ -79,20 +113,113 @@
 							/>
 						</svg>
 					</span>
-					Highlight Mode: Click on any element to select it
+					Click anywhere to describe an element
 				</div>
+
+				<!-- Overlay for capturing clicks -->
+				<button
+					onclick={handleOverlayClick}
+					class="absolute inset-0 top-7 bg-indigo-600/10 hover:bg-indigo-600/20 cursor-crosshair transition-colors z-10 border-2 border-dashed border-indigo-400"
+				>
+					<span class="sr-only">Click to select element</span>
+				</button>
 			{/if}
 
 			{#key iframeKey}
 				<iframe
 					bind:this={iframeRef}
-					src={displayUrl}
+					src={previewUrl}
 					title="Preview"
 					class="w-full border-0 {highlightMode ? 'h-[calc(100%-28px)]' : 'h-full'}"
 					sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
 				></iframe>
 			{/key}
 		</div>
+
+		<!-- Manual Element Selector Modal -->
+		{#if showManualSelector}
+			<div class="absolute inset-0 bg-gray-900/50 flex items-center justify-center z-20 rounded-lg">
+				<div class="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 overflow-hidden">
+					<div class="bg-indigo-600 px-4 py-3">
+						<h3 class="text-white font-medium">Describe the Element</h3>
+						<p class="text-indigo-200 text-xs mt-0.5">
+							Use browser DevTools (right-click → Inspect) to find element details
+						</p>
+					</div>
+					<div class="p-4 space-y-3">
+						<div>
+							<label for="tagName" class="block text-xs font-medium text-gray-700 mb-1">
+								Tag Name <span class="text-red-500">*</span>
+							</label>
+							<input
+								id="tagName"
+								type="text"
+								bind:value={manualTagName}
+								placeholder="button, div, input, etc."
+								class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+							/>
+						</div>
+						<div>
+							<label for="elementId" class="block text-xs font-medium text-gray-700 mb-1">
+								ID (optional)
+							</label>
+							<input
+								id="elementId"
+								type="text"
+								bind:value={manualId}
+								placeholder="submit-btn"
+								class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+							/>
+						</div>
+						<div>
+							<label for="classes" class="block text-xs font-medium text-gray-700 mb-1">
+								Classes (space-separated, optional)
+							</label>
+							<input
+								id="classes"
+								type="text"
+								bind:value={manualClasses}
+								placeholder="btn btn-primary"
+								class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+							/>
+						</div>
+						<div>
+							<label for="description" class="block text-xs font-medium text-gray-700 mb-1">
+								Description (optional)
+							</label>
+							<input
+								id="description"
+								type="text"
+								bind:value={manualDescription}
+								placeholder="The blue submit button at the bottom"
+								class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+							/>
+						</div>
+
+						{#if manualTagName.trim()}
+							<div class="text-xs text-gray-500 bg-gray-50 p-2 rounded font-mono">
+								Selector: {buildCssSelector()}
+							</div>
+						{/if}
+					</div>
+					<div class="px-4 py-3 bg-gray-50 flex gap-2">
+						<button
+							onclick={handleCancelManual}
+							class="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-100"
+						>
+							Cancel
+						</button>
+						<button
+							onclick={handleManualSelect}
+							disabled={!manualTagName.trim()}
+							class="flex-1 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+						>
+							Select Element
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
 	</div>
 
 	<!-- Mobile Indicator -->
