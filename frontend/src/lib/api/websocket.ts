@@ -1,6 +1,8 @@
 // WebSocket connection manager for terminal streaming
 
-const WS_BASE = 'ws://localhost:5150';
+// Use the current hostname to support LAN access
+const WS_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const WS_BASE = `ws://${WS_HOST}:5150`;
 
 export interface OutputMessage {
 	type: 'output';

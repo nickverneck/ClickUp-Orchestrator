@@ -38,15 +38,20 @@
 
 {#if open}
 	<!-- Backdrop -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
 		onclick={handleBackdropClick}
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="modal-title"
+		onkeydown={handleKeydown}
 	>
 		<!-- Modal -->
-		<div class="w-full max-w-md rounded-lg bg-white shadow-xl">
+		<div
+			class="w-full max-w-md rounded-lg bg-white shadow-xl"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="modal-title"
+			tabindex="-1"
+		>
 			<div class="p-6">
 				<!-- Icon -->
 				<div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full {danger ? 'bg-red-100' : 'bg-blue-100'}">

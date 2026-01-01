@@ -1,6 +1,8 @@
 // Base API client for backend communication
 
-const API_BASE = 'http://localhost:5150/api';
+// Use the current hostname to support LAN access
+const API_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const API_BASE = `http://${API_HOST}:5150/api`;
 
 export class ApiError extends Error {
 	constructor(
