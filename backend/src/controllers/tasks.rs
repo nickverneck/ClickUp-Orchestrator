@@ -5,6 +5,7 @@ use crate::services::process_manager::PROCESS_MANAGER;
 use loco_rs::prelude::*;
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, Set};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 #[derive(Debug, Serialize)]
 pub struct TaskResponse {
@@ -24,6 +25,8 @@ pub struct TaskResponse {
 impl From<orchestrator_tasks::Model> for TaskResponse {
     fn from(task: orchestrator_tasks::Model) -> Self {
         let is_running = PROCESS_MANAGER.is_running(task.id);
+        let now = chrono::Utc::now();
+        let time_spent_ms = compute_time_spent_ms(&task, is_running, now);
         Self {
             id: task.id,
             clickup_task_id: task.clickup_task_id,
@@ -32,7 +35,7 @@ impl From<orchestrator_tasks::Model> for TaskResponse {
             priority: task.priority,
             status: task.status,
             worktree_path: task.worktree_path,
-            time_spent_ms: task.time_spent_ms,
+            time_spent_ms,
             started_at: task.started_at.map(|t| t.to_rfc3339()),
             completed_at: task.completed_at.map(|t| t.to_rfc3339()),
             is_running,
@@ -43,6 +46,44 @@ impl From<orchestrator_tasks::Model> for TaskResponse {
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
     pub status: Option<String>,
+}
+
+fn sanitize_worktree_name(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect::<String>()
+        .to_lowercase()
+}
+
+fn elapsed_ms_since(
+    started_at: &chrono::DateTime<chrono::FixedOffset>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> i32 {
+    let elapsed_ms = now
+        .signed_duration_since(started_at.with_timezone(&chrono::Utc))
+        .num_milliseconds();
+    if elapsed_ms <= 0 {
+        0
+    } else if elapsed_ms > i32::MAX as i64 {
+        i32::MAX
+    } else {
+        elapsed_ms as i32
+    }
+}
+
+fn compute_time_spent_ms(
+    task: &orchestrator_tasks::Model,
+    is_running: bool,
+    now: chrono::DateTime<chrono::Utc>,
+) -> i32 {
+    let mut time_spent_ms = task.time_spent_ms;
+    if is_running || task.status == "in_progress" {
+        if let Some(started_at) = &task.started_at {
+            let elapsed_ms = elapsed_ms_since(started_at, now);
+            time_spent_ms = time_spent_ms.saturating_add(elapsed_ms);
+        }
+    }
+    time_spent_ms
 }
 
 /// List all tasks
@@ -93,10 +134,19 @@ async fn stop(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Resp
         tracing::error!("Failed to kill process: {}", e);
     }
 
+    let now = chrono::Utc::now();
+    let time_spent_ms = match task.started_at.as_ref() {
+        Some(started_at) => task
+            .time_spent_ms
+            .saturating_add(elapsed_ms_since(started_at, now)),
+        None => task.time_spent_ms,
+    };
+
     // Update task status
     let mut active: orchestrator_tasks::ActiveModel = task.into();
     active.status = Set("stopped".to_string());
-    active.updated_at = Set(chrono::Utc::now().into());
+    active.time_spent_ms = Set(time_spent_ms);
+    active.updated_at = Set(now.into());
     let updated = active.update(&ctx.db).await?;
 
     // Update process session
@@ -105,7 +155,7 @@ async fn stop(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Resp
         .filter(process_sessions::Column::EndedAt.is_null())
         .col_expr(
             process_sessions::Column::EndedAt,
-            sea_orm::sea_query::Expr::value(chrono::Utc::now()),
+            sea_orm::sea_query::Expr::value(now),
         )
         .exec(&ctx.db)
         .await;
@@ -127,13 +177,42 @@ async fn restart(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<R
         ));
     }
 
-    let worktree_path = task.worktree_path.clone().ok_or(Error::BadRequest(
+    let raw_worktree_path = task.worktree_path.clone().ok_or(Error::BadRequest(
         "Task has no worktree path".to_string(),
     ))?;
+    let mut worktree_path = raw_worktree_path.trim().to_string();
+    let mut worktree_path_needs_update = worktree_path != raw_worktree_path;
 
-    // Check if worktree exists, if not try to recreate it
-    if !std::path::Path::new(&worktree_path).exists() {
-        tracing::warn!("Worktree path does not exist: {}, will need to recreate", worktree_path);
+    // Check if worktree exists, if not try to resolve it using current settings
+    if !Path::new(&worktree_path).exists() {
+        if let Some(target_repo_path) = settings::Entity::find()
+            .filter(settings::Column::Key.eq("target_repo_path"))
+            .one(&ctx.db)
+            .await
+            .ok()
+            .flatten()
+            .map(|s| s.value)
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+        {
+            let worktree_name = Path::new(&worktree_path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.to_string())
+                .unwrap_or_else(|| sanitize_worktree_name(&task.name));
+            let candidate_path = format!("{}/worktrees/{}", target_repo_path, worktree_name);
+            if Path::new(&candidate_path).exists() {
+                worktree_path = candidate_path;
+                worktree_path_needs_update = true;
+            }
+        }
+    }
+
+    if !Path::new(&worktree_path).exists() {
+        tracing::warn!(
+            "Worktree path does not exist: {}, will need to recreate",
+            worktree_path
+        );
         return Err(Error::BadRequest(format!(
             "Worktree path does not exist: {}. The task needs to be recreated.",
             worktree_path
@@ -179,6 +258,9 @@ async fn restart(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<R
             active.status = Set("in_progress".to_string());
             active.started_at = Set(Some(chrono::Utc::now().into()));
             active.updated_at = Set(chrono::Utc::now().into());
+            if worktree_path_needs_update {
+                active.worktree_path = Set(Some(worktree_path.clone()));
+            }
             let updated = active.update(&ctx.db).await?;
 
             // Create new process session
@@ -317,14 +399,12 @@ async fn mark_complete(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Re
 
     let now = chrono::Utc::now();
 
-    // Calculate time spent if started_at exists
-    let time_spent_ms = task
-        .started_at
-        .map(|started| {
-            let elapsed = now.signed_duration_since(started.with_timezone(&chrono::Utc));
-            elapsed.num_milliseconds() as i32
-        })
-        .unwrap_or(task.time_spent_ms);
+    let time_spent_ms = match task.started_at.as_ref() {
+        Some(started_at) if task.status == "in_progress" => task
+            .time_spent_ms
+            .saturating_add(elapsed_ms_since(started_at, now)),
+        _ => task.time_spent_ms,
+    };
 
     // Update task status to completed
     let mut active: orchestrator_tasks::ActiveModel = task.into();

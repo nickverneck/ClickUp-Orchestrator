@@ -52,7 +52,10 @@ impl ClickUpPollerInitializer {
             .and_then(|s| s.parse().ok())
             .unwrap_or(1);
 
-        let target_repo_path = match Self::get_setting(db, "target_repo_path").await {
+        let target_repo_path = match Self::get_setting(db, "target_repo_path")
+            .await
+            .map(|p| p.trim().to_string())
+        {
             Some(p) if !p.is_empty() => p,
             _ => {
                 tracing::debug!("No target repo path configured, skipping poll");

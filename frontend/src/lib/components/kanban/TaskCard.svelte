@@ -74,7 +74,7 @@
 					Running
 				</span>
 			{/if}
-			{#if task.time_spent_ms > 0}
+			{#if task.is_running || task.time_spent_ms > 0}
 				<span class="text-xs text-gray-500">
 					{formatDuration(task.time_spent_ms)}
 				</span>

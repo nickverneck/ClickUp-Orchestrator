@@ -34,14 +34,26 @@ impl ProcessMonitorInitializer {
             .await;
 
         if let Ok(Some(task)) = task_result {
-            // Calculate time spent
-            let time_spent_ms = task
-                .started_at
-                .map(|started| {
-                    let elapsed = now.signed_duration_since(started.with_timezone(&chrono::Utc));
-                    elapsed.num_milliseconds() as i32
-                })
-                .unwrap_or(0);
+            let time_spent_ms = if task.status == "in_progress" {
+                match task.started_at.as_ref() {
+                    Some(started_at) => {
+                        let elapsed_ms = now
+                            .signed_duration_since(started_at.with_timezone(&chrono::Utc))
+                            .num_milliseconds();
+                        let elapsed_ms = if elapsed_ms <= 0 {
+                            0
+                        } else if elapsed_ms > i32::MAX as i64 {
+                            i32::MAX
+                        } else {
+                            elapsed_ms as i32
+                        };
+                        task.time_spent_ms.saturating_add(elapsed_ms)
+                    }
+                    None => task.time_spent_ms,
+                }
+            } else {
+                task.time_spent_ms
+            };
 
             let mut active: orchestrator_tasks::ActiveModel = task.into();
             active.status = Set(final_status.to_string());
