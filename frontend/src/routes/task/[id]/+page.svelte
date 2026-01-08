@@ -1,17 +1,31 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import Terminal from '$lib/components/terminal/Terminal.svelte';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import ConfirmModal from '$lib/components/ui/ConfirmModal.svelte';
-	import { getTask, stopTask, restartTask, deleteTask, type Task } from '$lib/api/tasks';
+	import {
+		getTask,
+		getTaskLogs,
+		stopTask,
+		restartTask,
+		deleteTask,
+		type Task,
+		type TaskLogEntry
+	} from '$lib/api/tasks';
 
 	let task = $state<Task | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let sidebarCollapsed = $state(false);
 	let deleteModalOpen = $state(false);
+	let activeTab = $state<'terminal' | 'logs'>('terminal');
+	let logs = $state<TaskLogEntry[]>([]);
+	let logsLoading = $state(false);
+	let logsError = $state<string | null>(null);
+	let legacyOutputLog = $state<string | null>(null);
+	let logsInterval: ReturnType<typeof setInterval> | null = null;
 
 	const taskId = $derived(parseInt($page.params.id ?? '0', 10));
 
@@ -22,6 +36,10 @@
 		if (saved !== null) {
 			sidebarCollapsed = saved === 'true';
 		}
+	});
+
+	onDestroy(() => {
+		stopLogsPolling();
 	});
 
 	// Save sidebar state when it changes
@@ -40,6 +58,41 @@
 			loading = false;
 		}
 	}
+
+	async function loadLogs() {
+		logsLoading = true;
+		logsError = null;
+		try {
+			const response = await getTaskLogs(taskId);
+			logs = response.logs;
+			legacyOutputLog = response.legacy_output_log ?? null;
+		} catch (e) {
+			logsError = e instanceof Error ? e.message : 'Failed to load logs';
+		} finally {
+			logsLoading = false;
+		}
+	}
+
+	function startLogsPolling() {
+		if (logsInterval) return;
+		logsInterval = setInterval(loadLogs, 5000);
+	}
+
+	function stopLogsPolling() {
+		if (logsInterval) {
+			clearInterval(logsInterval);
+			logsInterval = null;
+		}
+	}
+
+	$effect(() => {
+		if (activeTab === 'logs') {
+			loadLogs();
+			startLogsPolling();
+		} else {
+			stopLogsPolling();
+		}
+	});
 
 	async function handleStop() {
 		if (!task) return;
@@ -109,6 +162,27 @@
 				return 'Low';
 			default:
 				return 'None';
+		}
+	}
+
+	function formatLogTime(timestamp: string): string {
+		return new Date(timestamp).toLocaleString();
+	}
+
+	function getLogBadge(log: TaskLogEntry): { text: string; class: string } {
+		switch (log.event_type) {
+			case 'status':
+				return { text: 'Status', class: 'bg-blue-100 text-blue-800' };
+			case 'clickup':
+				return { text: 'ClickUp', class: 'bg-green-100 text-green-800' };
+			case 'system':
+				return { text: 'System', class: 'bg-yellow-100 text-yellow-800' };
+			case 'output':
+				return log.is_stderr
+					? { text: 'Stderr', class: 'bg-red-100 text-red-800' }
+					: { text: 'Output', class: 'bg-gray-100 text-gray-700' };
+			default:
+				return { text: 'Log', class: 'bg-gray-100 text-gray-600' };
 		}
 	}
 </script>
@@ -252,8 +326,70 @@
 				</div>
 
 				<!-- Terminal -->
-				<div class="flex-1 overflow-hidden rounded-lg shadow">
-					<Terminal taskId={task.id} onKill={handleKill} />
+				<div class="flex-1 overflow-hidden rounded-lg shadow bg-white flex flex-col">
+					<div class="flex items-center justify-between border-b bg-gray-50">
+						<div class="flex">
+							<button
+								class="px-4 py-2 text-sm font-medium border-b-2 {activeTab === 'terminal' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+								onclick={() => (activeTab = 'terminal')}
+							>
+								Terminal
+							</button>
+							<button
+								class="px-4 py-2 text-sm font-medium border-b-2 {activeTab === 'logs' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+								onclick={() => (activeTab = 'logs')}
+							>
+								Logs
+							</button>
+						</div>
+						{#if activeTab === 'logs'}
+							<button
+								class="mr-3 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+								disabled={logsLoading}
+								onclick={loadLogs}
+							>
+								Refresh
+							</button>
+						{/if}
+					</div>
+
+					{#if activeTab === 'terminal'}
+						<div class="flex-1 overflow-hidden">
+							<Terminal taskId={task.id} onKill={handleKill} />
+						</div>
+					{:else}
+						<div class="flex-1 overflow-y-auto bg-gray-900 px-4 py-3 text-xs text-gray-200 font-mono">
+							{#if logsLoading}
+								<div class="text-gray-400">Loading logs...</div>
+							{:else if logsError}
+								<div class="text-red-400">{logsError}</div>
+							{:else if logs.length === 0 && legacyOutputLog}
+								<div class="text-gray-400">Legacy output (timestamps unavailable).</div>
+								<pre class="mt-2 whitespace-pre-wrap text-gray-100">{legacyOutputLog}</pre>
+							{:else if logs.length === 0}
+								<div class="text-gray-400">No logs yet.</div>
+							{:else}
+								<div class="space-y-2">
+									{#each logs as log}
+										{#key log.id}
+											<div class="flex gap-3 items-start">
+												<span class="text-gray-400 whitespace-nowrap">
+													{formatLogTime(log.created_at)}
+												</span>
+												{@const badge = getLogBadge(log)}
+												<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase {badge.class}">
+													{badge.text}
+												</span>
+												<span class={log.is_stderr ? 'text-red-300 whitespace-pre-wrap' : 'text-gray-100 whitespace-pre-wrap'}>
+													{log.message}
+												</span>
+											</div>
+										{/key}
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/if}
 				</div>
 			</div>
 		{/if}

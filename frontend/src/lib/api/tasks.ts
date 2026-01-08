@@ -16,6 +16,23 @@ export interface Task {
 	is_running: boolean;
 }
 
+export interface TaskLogEntry {
+	id: number;
+	task_id: number;
+	created_at: string;
+	event_type: string;
+	message: string;
+	is_stderr?: boolean | null;
+}
+
+export interface TaskLogsResponse {
+	task_id: number;
+	name: string;
+	status: string;
+	logs: TaskLogEntry[];
+	legacy_output_log?: string | null;
+}
+
 export interface TaskStats {
 	queued: number;
 	in_progress: number;
@@ -32,6 +49,10 @@ export async function getTasks(status?: string): Promise<Task[]> {
 
 export async function getTask(id: number): Promise<Task> {
 	return get<Task>(`/tasks/${id}`);
+}
+
+export async function getTaskLogs(id: number): Promise<TaskLogsResponse> {
+	return get<TaskLogsResponse>(`/tasks/${id}/logs`);
 }
 
 export async function getTaskStats(): Promise<TaskStats> {

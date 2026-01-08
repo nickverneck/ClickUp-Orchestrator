@@ -19,6 +19,7 @@ use crate::{
     initializers::{
         clickup_poller::ClickUpPollerInitializer,
         process_monitor::ProcessMonitorInitializer,
+        task_log_listener::TaskLogListenerInitializer,
     },
     models::_entities::users,
     tasks,
@@ -54,6 +55,7 @@ impl Hooks for App {
         Ok(vec![
             Box::new(ProcessMonitorInitializer),
             Box::new(ClickUpPollerInitializer),
+            Box::new(TaskLogListenerInitializer),
         ])
     }
 

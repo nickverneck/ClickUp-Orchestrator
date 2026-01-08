@@ -91,6 +91,11 @@
 				}
 				break;
 			case 'output':
+				if (msg.line.includes('Process exited with code')) {
+					isRunning = false;
+				} else if (!isRunning) {
+					isRunning = true;
+				}
 				if (msg.is_stderr) {
 					terminal.write(`\x1b[31m${msg.line}\x1b[0m\r\n`);
 				} else {

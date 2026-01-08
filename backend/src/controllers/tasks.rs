@@ -1,7 +1,10 @@
 //! Tasks controller for managing orchestrator tasks
 
-use crate::models::_entities::{orchestrator_tasks, process_sessions, settings};
+use crate::models::_entities::{
+    orchestrator_task_logs, orchestrator_tasks, process_sessions, settings,
+};
 use crate::services::process_manager::PROCESS_MANAGER;
+use crate::services::task_logs::{log_task_event, log_task_status_change, EVENT_SYSTEM};
 use loco_rs::prelude::*;
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, Set};
 use serde::{Deserialize, Serialize};
@@ -20,6 +23,29 @@ pub struct TaskResponse {
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
     pub is_running: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TaskLogEntry {
+    pub id: i32,
+    pub task_id: i32,
+    pub created_at: String,
+    pub event_type: String,
+    pub message: String,
+    pub is_stderr: Option<bool>,
+}
+
+impl From<orchestrator_task_logs::Model> for TaskLogEntry {
+    fn from(log: orchestrator_task_logs::Model) -> Self {
+        Self {
+            id: log.id,
+            task_id: log.task_id,
+            created_at: log.created_at.to_rfc3339(),
+            event_type: log.event_type,
+            message: log.message,
+            is_stderr: log.is_stderr,
+        }
+    }
 }
 
 impl From<orchestrator_tasks::Model> for TaskResponse {
@@ -129,6 +155,8 @@ async fn stop(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Resp
         return Err(Error::BadRequest("Task is not in progress".to_string()));
     }
 
+    let previous_status = task.status.clone();
+
     // Kill the process
     if let Err(e) = PROCESS_MANAGER.kill_process(id).await {
         tracing::error!("Failed to kill process: {}", e);
@@ -148,6 +176,18 @@ async fn stop(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Resp
     active.time_spent_ms = Set(time_spent_ms);
     active.updated_at = Set(now.into());
     let updated = active.update(&ctx.db).await?;
+
+    if let Err(e) = log_task_status_change(
+        &ctx.db,
+        updated.id,
+        &previous_status,
+        "stopped",
+        Some("stopped by user".to_string()),
+    )
+    .await
+    {
+        tracing::warn!("Failed to log stop event for task {}: {}", updated.id, e);
+    }
 
     // Update process session
     let _ = process_sessions::Entity::update_many()
@@ -170,6 +210,8 @@ async fn restart(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<R
         .one(&ctx.db)
         .await?
         .ok_or(Error::NotFound)?;
+
+    let previous_status = task.status.clone();
 
     if task.status != "stopped" && task.status != "failed" {
         return Err(Error::BadRequest(
@@ -263,6 +305,30 @@ async fn restart(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<R
             }
             let updated = active.update(&ctx.db).await?;
 
+            if let Err(e) = log_task_status_change(
+                &ctx.db,
+                updated.id,
+                &previous_status,
+                "in_progress",
+                Some("restarted".to_string()),
+            )
+            .await
+            {
+                tracing::warn!("Failed to log restart status for task {}: {}", updated.id, e);
+            }
+
+            if let Err(e) = log_task_event(
+                &ctx.db,
+                updated.id,
+                EVENT_SYSTEM,
+                format!("Agent restarted (PID: {})", pid),
+                None,
+            )
+            .await
+            {
+                tracing::warn!("Failed to log restart spawn for task {}: {}", updated.id, e);
+            }
+
             // Create new process session
             let session = process_sessions::ActiveModel {
                 task_id: Set(id),
@@ -299,6 +365,12 @@ async fn delete(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Re
             tracing::warn!("Failed to kill process for task {}: {}", id, e);
         }
     }
+
+    // Delete associated logs
+    orchestrator_task_logs::Entity::delete_many()
+        .filter(orchestrator_task_logs::Column::TaskId.eq(id))
+        .exec(&ctx.db)
+        .await?;
 
     // Delete associated process sessions
     process_sessions::Entity::delete_many()
@@ -376,11 +448,21 @@ async fn get_logs(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<
         .await?
         .ok_or(Error::NotFound)?;
 
+    let logs = orchestrator_task_logs::Entity::find()
+        .filter(orchestrator_task_logs::Column::TaskId.eq(id))
+        .order_by_asc(orchestrator_task_logs::Column::CreatedAt)
+        .all(&ctx.db)
+        .await?
+        .into_iter()
+        .map(TaskLogEntry::from)
+        .collect::<Vec<_>>();
+
     format::json(serde_json::json!({
         "task_id": task.id,
         "name": task.name,
         "status": task.status,
-        "log": task.output_log
+        "logs": logs,
+        "legacy_output_log": task.output_log
     }))
 }
 
@@ -391,6 +473,8 @@ async fn mark_complete(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Re
         .one(&ctx.db)
         .await?
         .ok_or(Error::NotFound)?;
+
+    let previous_status = task.status.clone();
 
     // Kill any running process for this task
     if PROCESS_MANAGER.is_running(id) {
@@ -413,6 +497,22 @@ async fn mark_complete(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Re
     active.time_spent_ms = Set(time_spent_ms);
     active.updated_at = Set(now.into());
     let updated = active.update(&ctx.db).await?;
+
+    if let Err(e) = log_task_status_change(
+        &ctx.db,
+        updated.id,
+        &previous_status,
+        "completed",
+        Some("marked complete".to_string()),
+    )
+    .await
+    {
+        tracing::warn!(
+            "Failed to log manual completion for task {}: {}",
+            updated.id,
+            e
+        );
+    }
 
     // Update any open process sessions
     let _ = process_sessions::Entity::update_many()

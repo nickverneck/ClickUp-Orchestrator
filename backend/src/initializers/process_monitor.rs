@@ -14,6 +14,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 
 use crate::models::_entities::{orchestrator_tasks, process_sessions};
 use crate::services::process_manager::{ProcessExitEvent, PROCESS_MANAGER};
+use crate::services::task_logs::log_task_status_change;
 
 pub struct ProcessMonitorInitializer;
 
@@ -34,6 +35,7 @@ impl ProcessMonitorInitializer {
             .await;
 
         if let Ok(Some(task)) = task_result {
+            let previous_status = task.status.clone();
             let time_spent_ms = if task.status == "in_progress" {
                 match task.started_at.as_ref() {
                     Some(started_at) => {
@@ -72,6 +74,21 @@ impl ProcessMonitorInitializer {
                     event.exit_code,
                     time_spent_ms
                 );
+                if let Err(e) = log_task_status_change(
+                    db,
+                    event.task_id,
+                    &previous_status,
+                    final_status,
+                    Some(format!("exit code {}", event.exit_code)),
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "Failed to log status change for task {}: {}",
+                        event.task_id,
+                        e
+                    );
+                }
             }
         } else {
             tracing::warn!(

@@ -176,6 +176,14 @@ impl ProcessManager {
         let output_tx = self.output_tx.clone();
         let processes = Arc::clone(&self.processes);
 
+        let started_message = "[Process started]".to_string();
+        output_buffer.lock().await.push(started_message.clone());
+        let _ = output_tx.send(OutputLine {
+            task_id,
+            line: started_message,
+            is_stderr: false,
+        });
+
         // Spawn task to handle stdout
         let output_tx_stdout = output_tx.clone();
         let buffer_stdout = Arc::clone(&output_buffer);

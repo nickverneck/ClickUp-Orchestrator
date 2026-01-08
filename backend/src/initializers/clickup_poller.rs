@@ -15,6 +15,9 @@ use tokio::time::interval;
 use crate::models::_entities::{orchestrator_tasks, settings};
 use crate::services::clickup::{priority_to_int, ClickUpClient};
 use crate::services::process_manager::PROCESS_MANAGER;
+use crate::services::task_logs::{
+    log_task_event, log_task_status_change, EVENT_CLICKUP, EVENT_SYSTEM,
+};
 
 pub struct ClickUpPollerInitializer;
 
@@ -180,6 +183,34 @@ impl ClickUpPollerInitializer {
 
             let task_id = inserted.last_insert_id;
 
+            if let Err(e) = log_task_event(
+                db,
+                task_id,
+                EVENT_SYSTEM,
+                "Task created from ClickUp",
+                None,
+            )
+            .await
+            {
+                tracing::warn!("Failed to log task creation for {}: {}", task_id, e);
+            }
+
+            if let Err(e) = log_task_event(
+                db,
+                task_id,
+                EVENT_CLICKUP,
+                format!("ClickUp status updated: {} -> {}", trigger_status, target_status),
+                None,
+            )
+            .await
+            {
+                tracing::warn!(
+                    "Failed to log ClickUp status update for {}: {}",
+                    task_id,
+                    e
+                );
+            }
+
             // Ensure worktrees directory exists
             let worktrees_dir = format!("{}/worktrees", target_repo_path);
             if let Err(e) = tokio::fs::create_dir_all(&worktrees_dir).await {
@@ -192,6 +223,21 @@ impl ClickUpPollerInitializer {
                     )
                     .exec(db)
                     .await;
+                if let Err(log_err) = log_task_status_change(
+                    db,
+                    task_id,
+                    "in_progress",
+                    "failed",
+                    Some(format!("worktrees dir create failed: {}", e)),
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "Failed to log worktree dir failure for {}: {}",
+                        task_id,
+                        log_err
+                    );
+                }
                 continue;
             }
 
@@ -232,6 +278,21 @@ impl ClickUpPollerInitializer {
                         )
                         .exec(db)
                         .await;
+                    if let Err(log_err) = log_task_status_change(
+                        db,
+                        task_id,
+                        "in_progress",
+                        "failed",
+                        Some(format!("git worktree command failed: {}", e)),
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            "Failed to log worktree command failure for {}: {}",
+                            task_id,
+                            log_err
+                        );
+                    }
                     continue;
                 }
                 Ok(output) if !output.status.success() => {
@@ -245,11 +306,41 @@ impl ClickUpPollerInitializer {
                         )
                         .exec(db)
                         .await;
+                    if let Err(log_err) = log_task_status_change(
+                        db,
+                        task_id,
+                        "in_progress",
+                        "failed",
+                        Some(format!("git worktree failed: {}", stderr)),
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            "Failed to log worktree failure for {}: {}",
+                            task_id,
+                            log_err
+                        );
+                    }
                     continue;
                 }
                 Ok(output) => {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     tracing::info!("Created worktree at {} on branch {}: {}", worktree_path, task_branch, stdout.trim());
+                    if let Err(log_err) = log_task_event(
+                        db,
+                        task_id,
+                        EVENT_SYSTEM,
+                        format!("Worktree created at {} (branch {})", worktree_path, task_branch),
+                        None,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            "Failed to log worktree creation for {}: {}",
+                            task_id,
+                            log_err
+                        );
+                    }
                 }
             }
 
@@ -264,6 +355,21 @@ impl ClickUpPollerInitializer {
                     )
                     .exec(db)
                     .await;
+                if let Err(log_err) = log_task_status_change(
+                    db,
+                    task_id,
+                    "in_progress",
+                    "failed",
+                    Some("worktree directory missing after creation".to_string()),
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "Failed to log missing worktree dir for {}: {}",
+                        task_id,
+                        log_err
+                    );
+                }
                 continue;
             }
 
@@ -295,6 +401,21 @@ impl ClickUpPollerInitializer {
                         task_id,
                         pid
                     );
+                    if let Err(log_err) = log_task_event(
+                        db,
+                        task_id,
+                        EVENT_SYSTEM,
+                        format!("Agent spawned (PID: {})", pid),
+                        None,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            "Failed to log agent spawn for {}: {}",
+                            task_id,
+                            log_err
+                        );
+                    }
 
                     // Insert process session record
                     let session = crate::models::_entities::process_sessions::ActiveModel {
@@ -323,6 +444,21 @@ impl ClickUpPollerInitializer {
                         )
                         .exec(db)
                         .await;
+                    if let Err(log_err) = log_task_status_change(
+                        db,
+                        task_id,
+                        "in_progress",
+                        "failed",
+                        Some(format!("agent spawn failed: {}", e)),
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            "Failed to log agent spawn failure for {}: {}",
+                            task_id,
+                            log_err
+                        );
+                    }
                 }
             }
         }
