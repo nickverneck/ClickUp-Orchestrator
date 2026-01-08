@@ -5,7 +5,7 @@ use crate::services::process_manager::PROCESS_MANAGER;
 use loco_rs::prelude::*;
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, Set};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::Path as FsPath;
 
 #[derive(Debug, Serialize)]
 pub struct TaskResponse {
@@ -184,7 +184,7 @@ async fn restart(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<R
     let mut worktree_path_needs_update = worktree_path != raw_worktree_path;
 
     // Check if worktree exists, if not try to resolve it using current settings
-    if !Path::new(&worktree_path).exists() {
+    if !FsPath::new(&worktree_path).exists() {
         if let Some(target_repo_path) = settings::Entity::find()
             .filter(settings::Column::Key.eq("target_repo_path"))
             .one(&ctx.db)
@@ -195,20 +195,20 @@ async fn restart(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<R
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty())
         {
-            let worktree_name = Path::new(&worktree_path)
+            let worktree_name = FsPath::new(&worktree_path)
                 .file_name()
                 .and_then(|name| name.to_str())
                 .map(|name| name.to_string())
                 .unwrap_or_else(|| sanitize_worktree_name(&task.name));
             let candidate_path = format!("{}/worktrees/{}", target_repo_path, worktree_name);
-            if Path::new(&candidate_path).exists() {
+            if FsPath::new(&candidate_path).exists() {
                 worktree_path = candidate_path;
                 worktree_path_needs_update = true;
             }
         }
     }
 
-    if !Path::new(&worktree_path).exists() {
+    if !FsPath::new(&worktree_path).exists() {
         tracing::warn!(
             "Worktree path does not exist: {}, will need to recreate",
             worktree_path
