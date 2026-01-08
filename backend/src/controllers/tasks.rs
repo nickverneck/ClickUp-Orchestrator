@@ -286,6 +286,22 @@ async fn stats(State(ctx): State<AppContext>) -> Result<Response> {
     }))
 }
 
+/// Get task logs
+#[debug_handler]
+async fn get_logs(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Response> {
+    let task = orchestrator_tasks::Entity::find_by_id(id)
+        .one(&ctx.db)
+        .await?
+        .ok_or(Error::NotFound)?;
+
+    format::json(serde_json::json!({
+        "task_id": task.id,
+        "name": task.name,
+        "status": task.status,
+        "log": task.output_log
+    }))
+}
+
 pub fn routes() -> Routes {
     Routes::new()
         .prefix("/api/tasks")
@@ -295,4 +311,5 @@ pub fn routes() -> Routes {
         .add("/{id}", axum::routing::delete(delete))
         .add("/{id}/stop", post(stop))
         .add("/{id}/restart", post(restart))
+        .add("/{id}/logs", get(get_logs))
 }

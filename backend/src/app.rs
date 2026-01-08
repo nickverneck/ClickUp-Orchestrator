@@ -16,7 +16,10 @@ use std::path::Path;
 #[allow(unused_imports)]
 use crate::{
     controllers,
-    initializers::clickup_poller::ClickUpPollerInitializer,
+    initializers::{
+        clickup_poller::ClickUpPollerInitializer,
+        process_monitor::ProcessMonitorInitializer,
+    },
     models::_entities::users,
     tasks,
     workers::downloader::DownloadWorker,
@@ -48,7 +51,10 @@ impl Hooks for App {
     }
 
     async fn initializers(_ctx: &AppContext) -> Result<Vec<Box<dyn Initializer>>> {
-        Ok(vec![Box::new(ClickUpPollerInitializer)])
+        Ok(vec![
+            Box::new(ProcessMonitorInitializer),
+            Box::new(ClickUpPollerInitializer),
+        ])
     }
 
     fn routes(_ctx: &AppContext) -> AppRoutes {

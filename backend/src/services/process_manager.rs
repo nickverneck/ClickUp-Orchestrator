@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, Mutex};
 
 #[derive(Debug, Clone)]
 pub struct OutputLine {
@@ -21,6 +21,14 @@ pub struct SessionOutputLine {
     pub is_stderr: bool,
 }
 
+/// Event fired when a process exits
+#[derive(Debug, Clone)]
+pub struct ProcessExitEvent {
+    pub task_id: i32,
+    pub exit_code: i32,
+    pub output_log: String,
+}
+
 pub struct ProcessHandle {
     pub pid: Option<u32>,
     input_tx: mpsc::Sender<String>,
@@ -30,6 +38,9 @@ pub struct ProcessHandle {
 pub struct ProcessManager {
     processes: Arc<DashMap<i32, ProcessHandle>>,
     output_tx: broadcast::Sender<OutputLine>,
+    exit_tx: broadcast::Sender<ProcessExitEvent>,
+    /// Output buffers for each task (task_id -> accumulated output lines)
+    output_buffers: Arc<DashMap<i32, Arc<Mutex<Vec<String>>>>>,
     // Session-based processes for UI refinements
     session_processes: Arc<DashMap<String, ProcessHandle>>,
     session_output_tx: broadcast::Sender<SessionOutputLine>,
@@ -40,6 +51,8 @@ impl Clone for ProcessManager {
         Self {
             processes: Arc::clone(&self.processes),
             output_tx: self.output_tx.clone(),
+            exit_tx: self.exit_tx.clone(),
+            output_buffers: Arc::clone(&self.output_buffers),
             session_processes: Arc::clone(&self.session_processes),
             session_output_tx: self.session_output_tx.clone(),
         }
@@ -55,10 +68,13 @@ impl Default for ProcessManager {
 impl ProcessManager {
     pub fn new() -> Self {
         let (output_tx, _) = broadcast::channel(1000);
+        let (exit_tx, _) = broadcast::channel(100);
         let (session_output_tx, _) = broadcast::channel(1000);
         Self {
             processes: Arc::new(DashMap::new()),
             output_tx,
+            exit_tx,
+            output_buffers: Arc::new(DashMap::new()),
             session_processes: Arc::new(DashMap::new()),
             session_output_tx,
         }
@@ -67,6 +83,11 @@ impl ProcessManager {
     /// Subscribe to output from all processes
     pub fn subscribe_output(&self) -> broadcast::Receiver<OutputLine> {
         self.output_tx.subscribe()
+    }
+
+    /// Subscribe to process exit events
+    pub fn subscribe_exits(&self) -> broadcast::Receiver<ProcessExitEvent> {
+        self.exit_tx.subscribe()
     }
 
     /// Check if a process is running for a task
@@ -148,14 +169,22 @@ impl ProcessManager {
         };
         self.processes.insert(task_id, handle);
 
+        // Create output buffer for this task
+        let output_buffer: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        self.output_buffers.insert(task_id, Arc::clone(&output_buffer));
+
         let output_tx = self.output_tx.clone();
         let processes = Arc::clone(&self.processes);
 
         // Spawn task to handle stdout
         let output_tx_stdout = output_tx.clone();
+        let buffer_stdout = Arc::clone(&output_buffer);
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
+                // Append to buffer
+                buffer_stdout.lock().await.push(line.clone());
+                // Broadcast to websockets
                 let _ = output_tx_stdout.send(OutputLine {
                     task_id,
                     line,
@@ -166,9 +195,13 @@ impl ProcessManager {
 
         // Spawn task to handle stderr
         let output_tx_stderr = output_tx.clone();
+        let buffer_stderr = Arc::clone(&output_buffer);
         tokio::spawn(async move {
             let mut reader = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = reader.next_line().await {
+                // Append to buffer
+                buffer_stderr.lock().await.push(line.clone());
+                // Broadcast to websockets
                 let _ = output_tx_stderr.send(OutputLine {
                     task_id,
                     line,
@@ -199,7 +232,9 @@ impl ProcessManager {
 
         // Spawn task to wait for process completion and cleanup
         let processes_cleanup = Arc::clone(&processes);
+        let output_buffers_cleanup = Arc::clone(&self.output_buffers);
         let output_tx_exit = output_tx.clone();
+        let exit_tx = self.exit_tx.clone();
         tokio::spawn(async move {
             let status = child.wait().await;
             let exit_code = status
@@ -207,10 +242,24 @@ impl ProcessManager {
                 .and_then(|s| s.code())
                 .unwrap_or(-1);
 
+            // Broadcast exit message to websockets
             let _ = output_tx_exit.send(OutputLine {
                 task_id,
                 line: format!("\n[Process exited with code {}]", exit_code),
                 is_stderr: false,
+            });
+
+            // Collect buffered output and send exit event
+            let output_log = if let Some((_, buffer)) = output_buffers_cleanup.remove(&task_id) {
+                buffer.lock().await.join("\n")
+            } else {
+                String::new()
+            };
+
+            let _ = exit_tx.send(ProcessExitEvent {
+                task_id,
+                exit_code,
+                output_log,
             });
 
             processes_cleanup.remove(&task_id);
