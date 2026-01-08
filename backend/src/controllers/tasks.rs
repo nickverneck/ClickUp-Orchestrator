@@ -302,6 +302,58 @@ async fn get_logs(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<
     }))
 }
 
+/// Manually mark a task as completed (for stuck tasks)
+#[debug_handler]
+async fn mark_complete(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Response> {
+    let task = orchestrator_tasks::Entity::find_by_id(id)
+        .one(&ctx.db)
+        .await?
+        .ok_or(Error::NotFound)?;
+
+    // Kill any running process for this task
+    if PROCESS_MANAGER.is_running(id) {
+        let _ = PROCESS_MANAGER.kill_process(id).await;
+    }
+
+    let now = chrono::Utc::now();
+
+    // Calculate time spent if started_at exists
+    let time_spent_ms = task
+        .started_at
+        .map(|started| {
+            let elapsed = now.signed_duration_since(started.with_timezone(&chrono::Utc));
+            elapsed.num_milliseconds() as i32
+        })
+        .unwrap_or(task.time_spent_ms);
+
+    // Update task status to completed
+    let mut active: orchestrator_tasks::ActiveModel = task.into();
+    active.status = Set("completed".to_string());
+    active.completed_at = Set(Some(now.into()));
+    active.time_spent_ms = Set(time_spent_ms);
+    active.updated_at = Set(now.into());
+    let updated = active.update(&ctx.db).await?;
+
+    // Update any open process sessions
+    let _ = process_sessions::Entity::update_many()
+        .filter(process_sessions::Column::TaskId.eq(id))
+        .filter(process_sessions::Column::EndedAt.is_null())
+        .col_expr(
+            process_sessions::Column::EndedAt,
+            sea_orm::sea_query::Expr::value(now),
+        )
+        .col_expr(
+            process_sessions::Column::ExitCode,
+            sea_orm::sea_query::Expr::value(0),
+        )
+        .exec(&ctx.db)
+        .await;
+
+    tracing::info!("Task {} manually marked as completed", id);
+
+    format::json(TaskResponse::from(updated))
+}
+
 pub fn routes() -> Routes {
     Routes::new()
         .prefix("/api/tasks")
@@ -311,5 +363,6 @@ pub fn routes() -> Routes {
         .add("/{id}", axum::routing::delete(delete))
         .add("/{id}/stop", post(stop))
         .add("/{id}/restart", post(restart))
+        .add("/{id}/complete", post(mark_complete))
         .add("/{id}/logs", get(get_logs))
 }

@@ -38,6 +38,10 @@
 		tasks.restart(id);
 	}
 
+	function handleComplete(id: number) {
+		tasks.complete(id);
+	}
+
 	function handleDelete(id: number) {
 		const task = tasks.tasks.find((t) => t.id === id);
 		if (task) {
@@ -102,6 +106,7 @@
 			color="blue"
 			onStop={handleStop}
 			onView={handleView}
+			onComplete={handleComplete}
 		/>
 
 		<KanbanColumn

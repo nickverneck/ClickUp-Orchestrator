@@ -10,9 +10,10 @@
 		onRestart?: (id: number) => void;
 		onView?: (id: number) => void;
 		onDelete?: (id: number) => void;
+		onComplete?: (id: number) => void;
 	}
 
-	let { title, tasks, color, onStop, onRestart, onView, onDelete }: Props = $props();
+	let { title, tasks, color, onStop, onRestart, onView, onDelete, onComplete }: Props = $props();
 
 	const colorClasses = {
 		gray: 'bg-gray-100 border-gray-300',
@@ -43,7 +44,7 @@
 
 	<div class="space-y-3 rounded-b-lg border border-t-0 border-gray-200 bg-gray-50 p-3 min-h-[400px]">
 		{#each tasks as task (task.id)}
-			<TaskCard {task} {onStop} {onRestart} {onView} {onDelete} />
+			<TaskCard {task} {onStop} {onRestart} {onView} {onDelete} {onComplete} />
 		{:else}
 			<div class="flex items-center justify-center h-32 text-sm text-gray-400">
 				No tasks

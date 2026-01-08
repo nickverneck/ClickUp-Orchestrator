@@ -1,6 +1,6 @@
 // Tasks store using Svelte 5 runes
 
-import { getTasks, getTaskStats, stopTask, restartTask, deleteTask, type Task, type TaskStats } from '$lib/api/tasks';
+import { getTasks, getTaskStats, stopTask, restartTask, completeTask, deleteTask, type Task, type TaskStats } from '$lib/api/tasks';
 
 // Tasks state
 let tasks = $state<Task[]>([]);
@@ -49,6 +49,16 @@ export function useTasks() {
 		}
 	}
 
+	async function complete(id: number) {
+		try {
+			const updated = await completeTask(id);
+			tasks = tasks.map((t) => (t.id === id ? updated : t));
+			await loadStats();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to mark task as complete';
+		}
+	}
+
 	async function remove(id: number) {
 		try {
 			await deleteTask(id);
@@ -81,6 +91,7 @@ export function useTasks() {
 		loadStats,
 		stop,
 		restart,
+		complete,
 		remove,
 		getTasksByStatus,
 		get queued() {

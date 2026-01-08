@@ -46,6 +46,10 @@ export async function restartTask(id: number): Promise<Task> {
 	return post<Task>(`/tasks/${id}/restart`);
 }
 
+export async function completeTask(id: number): Promise<Task> {
+	return post<Task>(`/tasks/${id}/complete`);
+}
+
 export async function deleteTask(id: number): Promise<{ success: boolean; message: string }> {
 	return del<{ success: boolean; message: string }>(`/tasks/${id}`);
 }

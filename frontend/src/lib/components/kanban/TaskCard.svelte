@@ -7,9 +7,10 @@
 		onRestart?: (id: number) => void;
 		onView?: (id: number) => void;
 		onDelete?: (id: number) => void;
+		onComplete?: (id: number) => void;
 	}
 
-	let { task, onStop, onRestart, onView, onDelete }: Props = $props();
+	let { task, onStop, onRestart, onView, onDelete, onComplete }: Props = $props();
 
 	function formatDuration(ms: number): string {
 		const seconds = Math.floor(ms / 1000);
@@ -102,6 +103,18 @@
 					<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+					</svg>
+				</button>
+			{/if}
+
+			{#if task.status === 'in_progress' && onComplete && !task.is_running}
+				<button
+					onclick={() => onComplete(task.id)}
+					class="p-1 text-green-400 hover:text-green-600"
+					title="Mark Complete"
+				>
+					<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
 					</svg>
 				</button>
 			{/if}
