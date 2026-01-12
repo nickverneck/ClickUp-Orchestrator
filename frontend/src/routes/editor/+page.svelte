@@ -6,6 +6,7 @@
 	import type { FileNode, EditorTab } from '$lib/types/editor';
 	import { getSettings } from '$lib/api/settings';
 	import { getFileContent, saveFile } from '$lib/api/files';
+	import { createUuid } from '$lib/utils/uuid';
 
 	let sidebarCollapsed = $state(false);
 
@@ -51,7 +52,7 @@
 		}
 
 		// Create new tab with loading state
-		const tabId = crypto.randomUUID();
+		const tabId = createUuid();
 		const newTab: EditorTab = {
 			id: tabId,
 			path,

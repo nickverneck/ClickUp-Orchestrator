@@ -7,6 +7,7 @@
 	import type { ChatMessage, QueuedMessage, ElementMetadata } from '$lib/types/ui-refinements';
 	import { UIRefinementsWebSocket, type SessionWsMessage } from '$lib/api/ui-refinements-ws';
 	import { getSettings } from '$lib/api/settings';
+	import { createUuid } from '$lib/utils/uuid';
 
 	let sidebarCollapsed = $state(false);
 
@@ -74,7 +75,7 @@
 		branchCreated = true;
 
 		// Create a new session ID and connect WebSocket
-		sessionId = crypto.randomUUID();
+		sessionId = createUuid();
 		connectWebSocket();
 	}
 
@@ -143,7 +144,7 @@
 	}
 
 	function handleSendMessage(content: string) {
-		const messageId = crypto.randomUUID();
+		const messageId = createUuid();
 		const newMessage: ChatMessage = {
 			id: messageId,
 			role: 'user',
@@ -197,7 +198,7 @@
 			messages = [
 				...messages,
 				{
-					id: crypto.randomUUID(),
+					id: createUuid(),
 					role: 'assistant',
 					content: 'Error: Not connected to backend or no target repository configured.',
 					timestamp: Date.now(),
@@ -210,7 +211,7 @@
 		}
 
 		// Create assistant message placeholder
-		const assistantId = crypto.randomUUID();
+		const assistantId = createUuid();
 		currentAssistantMessageId = assistantId;
 		messages = [
 			...messages,

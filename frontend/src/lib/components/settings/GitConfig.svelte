@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { validatePath, getBranches, fetchRepo, detectPath } from '$lib/api/git';
+	import { createUuid } from '$lib/utils/uuid';
 
 	interface Props {
 		repoPath: string;
@@ -47,7 +48,7 @@
 			});
 
 			// Generate a unique marker filename
-			const markerId = crypto.randomUUID();
+			const markerId = createUuid();
 			const markerFilename = `.clickup-orchestrator-path-${markerId}`;
 
 			// Create the marker file in the selected directory
