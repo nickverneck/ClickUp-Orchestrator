@@ -1,9 +1,9 @@
-<script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
-	import { Terminal } from '@xterm/xterm';
-	import { FitAddon } from '@xterm/addon-fit';
-	import { TerminalWebSocket, type WsMessage } from '$lib/api/websocket';
-	import '@xterm/xterm/css/xterm.css';
+	<script lang="ts">
+		import { onMount, onDestroy } from 'svelte';
+		import type { Terminal as XtermTerminal } from '@xterm/xterm';
+		import { FitAddon } from '@xterm/addon-fit';
+		import { TerminalWebSocket, type WsMessage } from '$lib/api/websocket';
+		import '@xterm/xterm/css/xterm.css';
 
 	interface Props {
 		taskId: number;
@@ -13,15 +13,17 @@
 	let { taskId, onKill }: Props = $props();
 
 	let terminalRef: HTMLDivElement;
-	let terminal: Terminal;
+	let terminal: XtermTerminal | null = null;
 	let fitAddon: FitAddon;
 	let ws: TerminalWebSocket;
+	let resizeObserver: ResizeObserver | null = null;
 	let connected = $state(false);
 	let isRunning = $state(false);
 
-	onMount(() => {
+	onMount(async () => {
+		const { Terminal } = await import('@xterm/xterm');
 		// Initialize terminal
-		terminal = new Terminal({
+		const terminalInstance = new Terminal({
 			cursorBlink: true,
 			theme: {
 				background: '#1e1e1e',
@@ -41,19 +43,20 @@
 			fontSize: 13,
 			lineHeight: 1.2
 		});
+		terminal = terminalInstance;
 
 		fitAddon = new FitAddon();
-		terminal.loadAddon(fitAddon);
-		terminal.open(terminalRef);
+		terminalInstance.loadAddon(fitAddon);
+		terminalInstance.open(terminalRef);
 		fitAddon.fit();
 
 		// Handle terminal input
-		terminal.onData((data) => {
+		terminalInstance.onData((data) => {
 			ws?.sendInput(data);
 		});
 
 		// Handle resize
-		const resizeObserver = new ResizeObserver(() => {
+		resizeObserver = new ResizeObserver(() => {
 			fitAddon.fit();
 		});
 		resizeObserver.observe(terminalRef);
@@ -67,20 +70,18 @@
 			}
 		);
 		ws.connect();
-
-		return () => {
-			resizeObserver.disconnect();
-			ws?.disconnect();
-			terminal?.dispose();
-		};
 	});
 
 	onDestroy(() => {
+		resizeObserver?.disconnect();
 		ws?.disconnect();
 		terminal?.dispose();
 	});
 
 	function handleMessage(msg: WsMessage) {
+		if (!terminal) {
+			return;
+		}
 		switch (msg.type) {
 			case 'connected':
 				connected = true;

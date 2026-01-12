@@ -370,21 +370,19 @@
 								<div class="text-gray-400">No logs yet.</div>
 							{:else}
 								<div class="space-y-2">
-									{#each logs as log}
-										{#key log.id}
-											<div class="flex gap-3 items-start">
-												<span class="text-gray-400 whitespace-nowrap">
-													{formatLogTime(log.created_at)}
-												</span>
-												{@const badge = getLogBadge(log)}
-												<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase {badge.class}">
-													{badge.text}
-												</span>
-												<span class={log.is_stderr ? 'text-red-300 whitespace-pre-wrap' : 'text-gray-100 whitespace-pre-wrap'}>
-													{log.message}
-												</span>
-											</div>
-										{/key}
+									{#each logs as log (log.id)}
+										{@const badge = getLogBadge(log)}
+										<div class="flex gap-3 items-start">
+											<span class="text-gray-400 whitespace-nowrap">
+												{formatLogTime(log.created_at)}
+											</span>
+											<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase {badge.class}">
+												{badge.text}
+											</span>
+											<span class={log.is_stderr ? 'text-red-300 whitespace-pre-wrap' : 'text-gray-100 whitespace-pre-wrap'}>
+												{log.message}
+											</span>
+										</div>
 									{/each}
 								</div>
 							{/if}
