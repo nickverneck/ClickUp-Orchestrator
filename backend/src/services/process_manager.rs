@@ -106,6 +106,7 @@ impl ProcessManager {
         task_id: i32,
         prompt: &str,
         worktree_path: &str,
+        agent_type: &str,
     ) -> Result<u32, String> {
         if self.is_running(task_id) {
             return Err(format!("Task {} already has a running process", task_id));
@@ -119,36 +120,64 @@ impl ProcessManager {
             ));
         }
 
-        // Check if claude command is available
-        let claude_check = Command::new("which")
-            .arg("claude")
-            .output()
-            .await;
+        let mut child = match agent_type {
+            "claude" => {
+                // Check if claude command is available
+                let claude_check = Command::new("which").arg("claude").output().await;
+                if claude_check.is_err() || !claude_check.unwrap().status.success() {
+                    return Err(
+                        "The 'claude' command is not found in PATH. Please install Claude Code CLI and ensure it's in your PATH.".to_string()
+                    );
+                }
 
-        if claude_check.is_err() || !claude_check.unwrap().status.success() {
-            return Err(
-                "The 'claude' command is not found in PATH. Please install Claude Code CLI and ensure it's in your PATH.".to_string()
-            );
-        }
+                // Use script command to provide a PTY for claude
+                // This makes claude think it's running in a terminal
+                // On macOS: script -q file command args...
+                // The -q flag suppresses the "Script started/done" messages
+                // The -p flag makes claude run in non-interactive "print" mode (closes when done)
+                Command::new("script")
+                    .arg("-q") // Quiet mode
+                    .arg("/dev/null") // Don't save transcript to file
+                    .arg("claude")
+                    .arg("-p") // Non-interactive print mode (exits when done)
+                    .arg(prompt)
+                    .arg("--dangerously-skip-permissions")
+                    .current_dir(worktree_path)
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| {
+                        format!(
+                            "Failed to spawn claude process: {} (working dir: {})",
+                            e, worktree_path
+                        )
+                    })?
+            }
+            "codex" => {
+                let codex_check = Command::new("which").arg("codex").output().await;
+                if codex_check.is_err() || !codex_check.unwrap().status.success() {
+                    return Err("The 'codex' command is not found in PATH.".to_string());
+                }
 
-        // Use script command to provide a PTY for claude
-        // This makes claude think it's running in a terminal
-        // On macOS: script -q file command args...
-        // The -q flag suppresses the "Script started/done" messages
-        // The -p flag makes claude run in non-interactive "print" mode (closes when done)
-        let mut child = Command::new("script")
-            .arg("-q")              // Quiet mode
-            .arg("/dev/null")       // Don't save transcript to file
-            .arg("claude")
-            .arg("-p")              // Non-interactive print mode (exits when done)
-            .arg(prompt)
-            .arg("--dangerously-skip-permissions")
-            .current_dir(worktree_path)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to spawn claude process: {} (working dir: {})", e, worktree_path))?;
+                Command::new("codex")
+                    .arg("exec")
+                    .arg("--full-auto")
+                    .arg(prompt)
+                    .current_dir(worktree_path)
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| {
+                        format!(
+                            "Failed to spawn codex process: {} (working dir: {})",
+                            e, worktree_path
+                        )
+                    })?
+            }
+            _ => return Err(format!("Unknown agent type: {}", agent_type)),
+        };
 
         let pid = child.id();
 
@@ -391,8 +420,8 @@ impl ProcessManager {
                 }
                 Command::new("codex")
                     .arg("exec")
-                    .arg(prompt)
                     .arg("--full-auto")
+                    .arg(prompt)
                     .current_dir(worktree_path)
                     .stdin(std::process::Stdio::piped())
                     .stdout(std::process::Stdio::piped())

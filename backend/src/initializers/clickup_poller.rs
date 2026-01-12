@@ -72,6 +72,9 @@ impl ClickUpPollerInitializer {
 
         // Get agent prompt (global instructions to combine with task description)
         let agent_prompt = Self::get_setting(db, "agent_prompt").await;
+        let agent_model = Self::get_setting(db, "agent_model")
+            .await
+            .unwrap_or_else(|| "claude".to_string());
 
         // Check how many tasks are currently in progress
         let in_progress_count = orchestrator_tasks::Entity::find()
@@ -392,7 +395,7 @@ impl ClickUpPollerInitializer {
 
             // Spawn CLI agent
             match PROCESS_MANAGER
-                .spawn_agent(task_id, &prompt, &worktree_path)
+                .spawn_agent(task_id, &prompt, &worktree_path, &agent_model)
                 .await
             {
                 Ok(pid) => {

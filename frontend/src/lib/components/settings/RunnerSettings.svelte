@@ -5,12 +5,14 @@
 		parallelLimit: number;
 		triggerStatus: string;
 		targetStatus: string;
+		agentModel: string;
 		agentPrompt: string;
 		baPrompt: string;
 		listId: string | null;
 		onParallelLimitChange: (limit: number) => void;
 		onTriggerStatusChange: (status: string) => void;
 		onTargetStatusChange: (status: string) => void;
+		onAgentModelChange: (model: string) => void;
 		onAgentPromptChange: (prompt: string) => void;
 		onBaPromptChange: (prompt: string) => void;
 	}
@@ -19,12 +21,14 @@
 		parallelLimit,
 		triggerStatus,
 		targetStatus,
+		agentModel,
 		agentPrompt,
 		baPrompt,
 		listId,
 		onParallelLimitChange,
 		onTriggerStatusChange,
 		onTargetStatusChange,
+		onAgentModelChange,
 		onAgentPromptChange,
 		onBaPromptChange
 	}: Props = $props();
@@ -66,12 +70,35 @@
 	function handleTargetStatusChange(e: Event) {
 		onTargetStatusChange((e.target as HTMLSelectElement).value);
 	}
+
+	function handleAgentModelChange(e: Event) {
+		onAgentModelChange((e.target as HTMLSelectElement).value);
+	}
 </script>
 
 <div class="space-y-4">
 	<h3 class="text-lg font-medium text-gray-900">Task Runner Settings</h3>
 
-	<div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+	<div class="grid grid-cols-1 gap-4 lg:grid-cols-4">
+		<!-- Agent Model -->
+		<div>
+			<label for="agent-model" class="block text-sm font-medium text-gray-700">
+				Task Runner Model
+			</label>
+			<select
+				id="agent-model"
+				value={agentModel}
+				onchange={handleAgentModelChange}
+				class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+			>
+				<option value="claude">Claude</option>
+				<option value="codex">Codex</option>
+			</select>
+			<p class="mt-1 text-sm text-gray-500">
+				Model used when spawning ClickUp task agents
+			</p>
+		</div>
+
 		<!-- Parallel Limit -->
 		<div>
 			<label for="parallel-limit" class="block text-sm font-medium text-gray-700">

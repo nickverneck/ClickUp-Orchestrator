@@ -15,6 +15,7 @@ const defaults: Record<string, string> = {
 	target_status: 'In Development',
 	target_repo_path: '',
 	dev_branch: 'dev',
+	agent_model: 'claude',
 	clickup_workspace_id: '',
 	clickup_space_id: '',
 	clickup_folder_id: '',
