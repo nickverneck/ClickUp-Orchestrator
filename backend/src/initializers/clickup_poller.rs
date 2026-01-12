@@ -408,7 +408,7 @@ impl ClickUpPollerInitializer {
                         db,
                         task_id,
                         EVENT_SYSTEM,
-                        format!("Agent spawned (PID: {})", pid),
+                        format!("Agent spawned (model: {}, PID: {})", agent_model, pid),
                         None,
                     )
                     .await

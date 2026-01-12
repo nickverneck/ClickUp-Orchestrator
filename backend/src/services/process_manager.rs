@@ -100,35 +100,26 @@ impl ProcessManager {
         self.processes.get(&task_id).and_then(|h| h.pid)
     }
 
-    /// Spawn a CLI agent process for a task
-    pub async fn spawn_agent(
-        &self,
-        task_id: i32,
+    async fn ensure_command(cmd: &str, error_message: &str) -> Result<(), String> {
+        let check = Command::new("which").arg(cmd).output().await;
+        if check.is_err() || !check.unwrap().status.success() {
+            return Err(error_message.to_string());
+        }
+        Ok(())
+    }
+
+    async fn spawn_agent_child(
+        agent_type: &str,
         prompt: &str,
         worktree_path: &str,
-        agent_type: &str,
-    ) -> Result<u32, String> {
-        if self.is_running(task_id) {
-            return Err(format!("Task {} already has a running process", task_id));
-        }
-
-        // Verify working directory exists
-        if !std::path::Path::new(worktree_path).exists() {
-            return Err(format!(
-                "Working directory does not exist: {}",
-                worktree_path
-            ));
-        }
-
-        let mut child = match agent_type {
+    ) -> Result<tokio::process::Child, String> {
+        match agent_type {
             "claude" => {
-                // Check if claude command is available
-                let claude_check = Command::new("which").arg("claude").output().await;
-                if claude_check.is_err() || !claude_check.unwrap().status.success() {
-                    return Err(
-                        "The 'claude' command is not found in PATH. Please install Claude Code CLI and ensure it's in your PATH.".to_string()
-                    );
-                }
+                Self::ensure_command(
+                    "claude",
+                    "The 'claude' command is not found in PATH. Please install Claude Code CLI and ensure it's in your PATH.",
+                )
+                .await?;
 
                 // Use script command to provide a PTY for claude
                 // This makes claude think it's running in a terminal
@@ -152,13 +143,10 @@ impl ProcessManager {
                             "Failed to spawn claude process: {} (working dir: {})",
                             e, worktree_path
                         )
-                    })?
+                    })
             }
             "codex" => {
-                let codex_check = Command::new("which").arg("codex").output().await;
-                if codex_check.is_err() || !codex_check.unwrap().status.success() {
-                    return Err("The 'codex' command is not found in PATH.".to_string());
-                }
+                Self::ensure_command("codex", "The 'codex' command is not found in PATH.").await?;
 
                 Command::new("codex")
                     .arg("exec")
@@ -174,10 +162,55 @@ impl ProcessManager {
                             "Failed to spawn codex process: {} (working dir: {})",
                             e, worktree_path
                         )
-                    })?
+                    })
             }
-            _ => return Err(format!("Unknown agent type: {}", agent_type)),
-        };
+            "gemini" => {
+                Self::ensure_command("gemini", "The 'gemini' command is not found in PATH.").await?;
+
+                Command::new("gemini")
+                    .arg(prompt)
+                    .arg("-y")
+                    .current_dir(worktree_path)
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| {
+                        format!(
+                            "Failed to spawn gemini process: {} (working dir: {})",
+                            e, worktree_path
+                        )
+                    })
+            }
+            _ => Err(format!("Unknown agent type: {}", agent_type)),
+        }
+    }
+
+    /// Spawn a CLI agent process for a task
+    pub async fn spawn_agent(
+        &self,
+        task_id: i32,
+        prompt: &str,
+        worktree_path: &str,
+        agent_type: &str,
+    ) -> Result<u32, String> {
+        if self.is_running(task_id) {
+            return Err(format!("Task {} already has a running process", task_id));
+        }
+
+        // Verify working directory exists
+        if !std::path::Path::new(worktree_path).exists() {
+            return Err(format!(
+                "Working directory does not exist: {}",
+                worktree_path
+            ));
+        }
+
+        if !matches!(agent_type, "claude" | "codex") {
+            return Err(format!("Agent type not supported for tasks: {}", agent_type));
+        }
+
+        let mut child = Self::spawn_agent_child(agent_type, prompt, worktree_path).await?;
 
         let pid = child.id();
 
@@ -205,7 +238,7 @@ impl ProcessManager {
         let output_tx = self.output_tx.clone();
         let processes = Arc::clone(&self.processes);
 
-        let started_message = "[Process started]".to_string();
+        let started_message = format!("[Process started: {}]", agent_type);
         output_buffer.lock().await.push(started_message.clone());
         let _ = output_tx.send(OutputLine {
             task_id,
@@ -391,62 +424,7 @@ impl ProcessManager {
         tracing::info!("Prompt: {}", prompt);
 
         // Spawn the agent based on type
-        let mut child = match agent_type {
-            "claude" => {
-                // Check if claude command is available
-                let claude_check = Command::new("which").arg("claude").output().await;
-                if claude_check.is_err() || !claude_check.unwrap().status.success() {
-                    return Err("The 'claude' command is not found in PATH.".to_string());
-                }
-                Command::new("script")
-                    .arg("-q")
-                    .arg("/dev/null")
-                    .arg("claude")
-                    .arg("-p")
-                    .arg(prompt)
-                    .arg("--dangerously-skip-permissions")
-                    .current_dir(worktree_path)
-                    .stdin(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()
-                    .map_err(|e| format!("Failed to spawn claude process: {}", e))?
-            }
-            "codex" => {
-                // Check if codex command is available
-                let codex_check = Command::new("which").arg("codex").output().await;
-                if codex_check.is_err() || !codex_check.unwrap().status.success() {
-                    return Err("The 'codex' command is not found in PATH.".to_string());
-                }
-                Command::new("codex")
-                    .arg("exec")
-                    .arg("--full-auto")
-                    .arg(prompt)
-                    .current_dir(worktree_path)
-                    .stdin(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()
-                    .map_err(|e| format!("Failed to spawn codex process: {}", e))?
-            }
-            "gemini" => {
-                // Check if gemini command is available
-                let gemini_check = Command::new("which").arg("gemini").output().await;
-                if gemini_check.is_err() || !gemini_check.unwrap().status.success() {
-                    return Err("The 'gemini' command is not found in PATH.".to_string());
-                }
-                Command::new("gemini")
-                    .arg(prompt)
-                    .arg("-y")
-                    .current_dir(worktree_path)
-                    .stdin(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()
-                    .map_err(|e| format!("Failed to spawn gemini process: {}", e))?
-            }
-            _ => return Err(format!("Unknown agent type: {}", agent_type)),
-        };
+        let mut child = Self::spawn_agent_child(agent_type, prompt, worktree_path).await?;
 
         let pid = child.id();
 
@@ -470,6 +448,12 @@ impl ProcessManager {
         let output_tx = self.session_output_tx.clone();
         let session_processes = Arc::clone(&self.session_processes);
         let session_id_owned = session_id.to_string();
+        let started_message = format!("[Process started: {}]", agent_type);
+        let _ = output_tx.send(SessionOutputLine {
+            session_id: session_id_owned.clone(),
+            line: started_message,
+            is_stderr: false,
+        });
 
         // Spawn task to handle stdout
         let output_tx_stdout = output_tx.clone();

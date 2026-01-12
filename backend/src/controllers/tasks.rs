@@ -330,7 +330,7 @@ async fn restart(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<R
                 &ctx.db,
                 updated.id,
                 EVENT_SYSTEM,
-                format!("Agent restarted (PID: {})", pid),
+                format!("Agent restarted (model: {}, PID: {})", agent_model, pid),
                 None,
             )
             .await
