@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import Terminal from '$lib/components/terminal/Terminal.svelte';
@@ -26,6 +26,8 @@
 	let logsError = $state<string | null>(null);
 	let legacyOutputLog = $state<string | null>(null);
 	let logsInterval: ReturnType<typeof setInterval> | null = null;
+	let logsContainer: HTMLDivElement | null = null;
+	const LOGS_SCROLL_THRESHOLD = 32;
 
 	const taskId = $derived(parseInt($page.params.id ?? '0', 10));
 
@@ -59,23 +61,54 @@
 		}
 	}
 
-	async function loadLogs() {
-		logsLoading = true;
-		logsError = null;
+	function isNearBottom(container: HTMLElement) {
+		return (
+			container.scrollHeight - container.scrollTop - container.clientHeight <
+			LOGS_SCROLL_THRESHOLD
+		);
+	}
+
+	async function loadLogs(options: { silent?: boolean } = {}) {
+		const { silent = false } = options;
+		const wasNearBottom = logsContainer ? isNearBottom(logsContainer) : true;
+		const previousScrollTop = logsContainer?.scrollTop ?? 0;
+		let updated = false;
+
+		if (!silent) {
+			logsLoading = true;
+			logsError = null;
+		}
+
 		try {
 			const response = await getTaskLogs(taskId);
 			logs = response.logs;
 			legacyOutputLog = response.legacy_output_log ?? null;
+			updated = true;
 		} catch (e) {
-			logsError = e instanceof Error ? e.message : 'Failed to load logs';
+			if (silent) {
+				console.error('Failed to refresh logs:', e);
+			} else {
+				logsError = e instanceof Error ? e.message : 'Failed to load logs';
+			}
 		} finally {
-			logsLoading = false;
+			if (!silent) {
+				logsLoading = false;
+			}
+		}
+
+		if (updated && logsContainer) {
+			await tick();
+			if (wasNearBottom) {
+				logsContainer.scrollTop = logsContainer.scrollHeight;
+			} else {
+				logsContainer.scrollTop = previousScrollTop;
+			}
 		}
 	}
 
 	function startLogsPolling() {
 		if (logsInterval) return;
-		logsInterval = setInterval(loadLogs, 5000);
+		logsInterval = setInterval(() => loadLogs({ silent: true }), 5000);
 	}
 
 	function stopLogsPolling() {
@@ -346,7 +379,7 @@
 							<button
 								class="mr-3 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
 								disabled={logsLoading}
-								onclick={loadLogs}
+								onclick={() => loadLogs()}
 							>
 								Refresh
 							</button>
@@ -358,7 +391,10 @@
 							<Terminal taskId={task.id} onKill={handleKill} />
 						</div>
 					{:else}
-						<div class="flex-1 overflow-y-auto bg-gray-900 px-4 py-3 text-xs text-gray-200 font-mono">
+						<div
+							class="flex-1 overflow-y-auto bg-gray-900 px-4 py-3 text-xs text-gray-200 font-mono"
+							bind:this={logsContainer}
+						>
 							{#if logsLoading}
 								<div class="text-gray-400">Loading logs...</div>
 							{:else if logsError}

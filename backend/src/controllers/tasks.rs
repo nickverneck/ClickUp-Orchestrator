@@ -3,8 +3,9 @@
 use crate::models::_entities::{
     orchestrator_task_logs, orchestrator_tasks, process_sessions, settings,
 };
+use crate::services::clickup::ClickUpClient;
 use crate::services::process_manager::PROCESS_MANAGER;
-use crate::services::task_logs::{log_task_event, log_task_status_change, EVENT_SYSTEM};
+use crate::services::task_logs::{log_task_event, log_task_status_change, EVENT_CLICKUP, EVENT_SYSTEM};
 use loco_rs::prelude::*;
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, Set};
 use serde::{Deserialize, Serialize};
@@ -521,6 +522,53 @@ async fn mark_complete(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Re
             updated.id,
             e
         );
+    }
+
+    let completion_status = settings::Entity::find()
+        .filter(settings::Column::Key.eq("completion_status"))
+        .one(&ctx.db)
+        .await
+        .ok()
+        .flatten()
+        .map(|s| s.value)
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "Complete".to_string());
+
+    if !completion_status.is_empty() {
+        match ClickUpClient::from_env() {
+            Ok(client) => {
+                if let Err(e) = client
+                    .update_task_status(&updated.clickup_task_id, &completion_status)
+                    .await
+                {
+                    tracing::warn!(
+                        "Failed to update ClickUp status for task {}: {}",
+                        updated.id,
+                        e
+                    );
+                } else if let Err(e) = log_task_event(
+                    &ctx.db,
+                    updated.id,
+                    EVENT_CLICKUP,
+                    format!("ClickUp status updated to {}", completion_status),
+                    None,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "Failed to log ClickUp completion update for task {}: {}",
+                        updated.id,
+                        e
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "ClickUp API not configured for completion update: {}",
+                    e
+                );
+            }
+        }
     }
 
     // Update any open process sessions

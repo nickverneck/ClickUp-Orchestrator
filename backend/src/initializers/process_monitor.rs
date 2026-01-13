@@ -12,13 +12,25 @@ use loco_rs::{
 };
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 
-use crate::models::_entities::{orchestrator_tasks, process_sessions};
+use crate::models::_entities::{orchestrator_tasks, process_sessions, settings};
+use crate::services::clickup::ClickUpClient;
 use crate::services::process_manager::{ProcessExitEvent, PROCESS_MANAGER};
-use crate::services::task_logs::log_task_status_change;
+use crate::services::task_logs::{log_task_event, log_task_status_change, EVENT_CLICKUP};
 
 pub struct ProcessMonitorInitializer;
 
 impl ProcessMonitorInitializer {
+    async fn get_setting(db: &sea_orm::DatabaseConnection, key: &str) -> Option<String> {
+        settings::Entity::find()
+            .filter(settings::Column::Key.eq(key))
+            .one(db)
+            .await
+            .ok()
+            .flatten()
+            .map(|s| s.value)
+            .filter(|v| !v.is_empty())
+    }
+
     async fn handle_process_exit(db: &sea_orm::DatabaseConnection, event: ProcessExitEvent) {
         let now = chrono::Utc::now();
 
@@ -36,6 +48,7 @@ impl ProcessMonitorInitializer {
 
         if let Ok(Some(task)) = task_result {
             let previous_status = task.status.clone();
+            let clickup_task_id = task.clickup_task_id.clone();
             let time_spent_ms = if task.status == "in_progress" {
                 match task.started_at.as_ref() {
                     Some(started_at) => {
@@ -88,6 +101,52 @@ impl ProcessMonitorInitializer {
                         event.task_id,
                         e
                     );
+                }
+
+                if final_status == "completed" {
+                    let completion_status =
+                        Self::get_setting(db, "completion_status")
+                            .await
+                            .unwrap_or_else(|| "Complete".to_string());
+                    if !completion_status.is_empty() {
+                        match ClickUpClient::from_env() {
+                            Ok(client) => {
+                                if let Err(e) = client
+                                    .update_task_status(&clickup_task_id, &completion_status)
+                                    .await
+                                {
+                                    tracing::warn!(
+                                        "Failed to update ClickUp status for task {}: {}",
+                                        event.task_id,
+                                        e
+                                    );
+                                } else if let Err(e) = log_task_event(
+                                    db,
+                                    event.task_id,
+                                    EVENT_CLICKUP,
+                                    format!(
+                                        "ClickUp status updated to {}",
+                                        completion_status
+                                    ),
+                                    None,
+                                )
+                                .await
+                                {
+                                    tracing::warn!(
+                                        "Failed to log ClickUp completion update for task {}: {}",
+                                        event.task_id,
+                                        e
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "ClickUp API not configured for completion update: {}",
+                                    e
+                                );
+                            }
+                        }
+                    }
                 }
             }
         } else {

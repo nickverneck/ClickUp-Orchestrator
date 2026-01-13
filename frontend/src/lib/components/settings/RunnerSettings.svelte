@@ -5,6 +5,7 @@
 		parallelLimit: number;
 		triggerStatus: string;
 		targetStatus: string;
+		completionStatus: string;
 		agentModel: string;
 		agentPrompt: string;
 		baPrompt: string;
@@ -12,6 +13,7 @@
 		onParallelLimitChange: (limit: number) => void;
 		onTriggerStatusChange: (status: string) => void;
 		onTargetStatusChange: (status: string) => void;
+		onCompletionStatusChange: (status: string) => void;
 		onAgentModelChange: (model: string) => void;
 		onAgentPromptChange: (prompt: string) => void;
 		onBaPromptChange: (prompt: string) => void;
@@ -21,6 +23,7 @@
 		parallelLimit,
 		triggerStatus,
 		targetStatus,
+		completionStatus,
 		agentModel,
 		agentPrompt,
 		baPrompt,
@@ -28,6 +31,7 @@
 		onParallelLimitChange,
 		onTriggerStatusChange,
 		onTargetStatusChange,
+		onCompletionStatusChange,
 		onAgentModelChange,
 		onAgentPromptChange,
 		onBaPromptChange
@@ -69,6 +73,10 @@
 
 	function handleTargetStatusChange(e: Event) {
 		onTargetStatusChange((e.target as HTMLSelectElement).value);
+	}
+
+	function handleCompletionStatusChange(e: Event) {
+		onCompletionStatusChange((e.target as HTMLSelectElement).value);
 	}
 
 	function handleAgentModelChange(e: Event) {
@@ -205,6 +213,48 @@
 					Loading statuses...
 				{:else}
 					Status to set when a task is picked up
+				{/if}
+			</p>
+		</div>
+
+		<!-- Completion Status -->
+		<div>
+			<label for="completion-status" class="block text-sm font-medium text-gray-700">
+				Completion Status
+			</label>
+			{#if statuses.length > 0}
+				<select
+					id="completion-status"
+					value={completionStatus}
+					onchange={handleCompletionStatusChange}
+					disabled={loading}
+					class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm disabled:bg-gray-100"
+				>
+					<option value="">Select status...</option>
+					{#each statuses as status}
+						<option value={status.status}>
+							{status.status}
+						</option>
+					{/each}
+				</select>
+			{:else}
+				<input
+					type="text"
+					id="completion-status"
+					value={completionStatus}
+					oninput={(e) => onCompletionStatusChange((e.target as HTMLInputElement).value)}
+					placeholder="Complete"
+					disabled={loading}
+					class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm disabled:bg-gray-100"
+				/>
+			{/if}
+			<p class="mt-1 text-sm text-gray-500">
+				{#if !listId}
+					Select a ClickUp list first to see available statuses
+				{:else if loading}
+					Loading statuses...
+				{:else}
+					Status to set when the agent finishes
 				{/if}
 			</p>
 		</div>

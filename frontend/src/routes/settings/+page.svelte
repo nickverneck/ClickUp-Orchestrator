@@ -55,6 +55,10 @@
 		settings.set('target_status', status);
 	}
 
+	function handleCompletionStatusChange(status: string) {
+		settings.set('completion_status', status);
+	}
+
 	function handleAgentPromptChange(prompt: string) {
 		settings.set('agent_prompt', prompt);
 	}
@@ -140,6 +144,7 @@
 						parallelLimit={parseInt(settings.get('parallel_limit') || '1', 10)}
 						triggerStatus={settings.get('trigger_status')}
 						targetStatus={settings.get('target_status')}
+						completionStatus={settings.get('completion_status')}
 						agentModel={settings.get('agent_model')}
 						agentPrompt={settings.get('agent_prompt')}
 						baPrompt={settings.get('ba_prompt')}
@@ -147,6 +152,7 @@
 						onParallelLimitChange={handleParallelLimitChange}
 						onTriggerStatusChange={handleTriggerStatusChange}
 						onTargetStatusChange={handleTargetStatusChange}
+						onCompletionStatusChange={handleCompletionStatusChange}
 						onAgentModelChange={handleAgentModelChange}
 						onAgentPromptChange={handleAgentPromptChange}
 						onBaPromptChange={handleBaPromptChange}

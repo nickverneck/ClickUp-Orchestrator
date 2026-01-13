@@ -13,6 +13,7 @@ const defaults: Record<string, string> = {
 	parallel_limit: '1',
 	trigger_status: 'Ready for Dev',
 	target_status: 'In Development',
+	completion_status: 'Complete',
 	target_repo_path: '',
 	dev_branch: 'dev',
 	agent_model: 'claude',
