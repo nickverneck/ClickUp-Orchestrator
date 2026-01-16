@@ -19,7 +19,8 @@
 		onRefresh
 	}: Props = $props();
 
-	let urlInput = $state(previewUrl);
+	let urlInput = $state('');
+	let urlInputEl = $state<HTMLInputElement | null>(null);
 	let isEditing = $state(false);
 
 	function handleUrlSubmit() {
@@ -39,7 +40,16 @@
 	}
 
 	$effect(() => {
-		urlInput = previewUrl;
+		if (!isEditing) {
+			urlInput = previewUrl;
+		}
+	});
+
+	$effect(() => {
+		if (isEditing && urlInputEl) {
+			urlInputEl.focus();
+			urlInputEl.select();
+		}
 	});
 </script>
 
@@ -66,10 +76,10 @@
 			<input
 				type="text"
 				bind:value={urlInput}
+				bind:this={urlInputEl}
 				onblur={handleUrlSubmit}
 				onkeydown={handleKeydown}
 				class="w-full px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
-				autofocus
 			/>
 		{:else}
 			<button

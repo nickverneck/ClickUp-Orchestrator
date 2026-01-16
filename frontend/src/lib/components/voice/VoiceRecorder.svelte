@@ -348,7 +348,12 @@
 					<p class="text-sm text-red-700">{error}</p>
 				</div>
 				<div class="ml-auto pl-3">
-					<button onclick={() => error = null} class="text-red-500 hover:text-red-600">
+					<button
+						type="button"
+						onclick={() => error = null}
+						class="text-red-500 hover:text-red-600"
+						aria-label="Dismiss error"
+					>
 						<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
 							<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
 						</svg>
@@ -602,7 +607,7 @@
 
 				<!-- Agent Selection -->
 				<div class="flex items-center gap-3 pt-3 border-t border-white/20">
-					<label class="text-sm font-medium text-white/90">Agent:</label>
+					<span class="text-sm font-medium text-white/90">Agent:</span>
 					<div class="flex gap-2">
 						{#each AGENT_OPTIONS as agent}
 							<button

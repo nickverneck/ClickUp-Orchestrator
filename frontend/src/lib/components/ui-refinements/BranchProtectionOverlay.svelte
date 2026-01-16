@@ -183,9 +183,9 @@
 					{#if mode === 'select' && existingBranches.length > 0}
 						<!-- Select Existing Branch -->
 						<div>
-							<label class="block text-sm font-medium text-gray-700 mb-2">
+							<p class="block text-sm font-medium text-gray-700 mb-2">
 								Select a branch to continue
-							</label>
+							</p>
 							<div class="space-y-2 max-h-48 overflow-y-auto">
 								{#each existingBranches as branch}
 									<button

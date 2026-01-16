@@ -26,7 +26,7 @@
 	let logsError = $state<string | null>(null);
 	let legacyOutputLog = $state<string | null>(null);
 	let logsInterval: ReturnType<typeof setInterval> | null = null;
-	let logsContainer: HTMLDivElement | null = null;
+	let logsContainer = $state<HTMLDivElement | null>(null);
 	const LOGS_SCROLL_THRESHOLD = 32;
 
 	const taskId = $derived(parseInt($page.params.id ?? '0', 10));
