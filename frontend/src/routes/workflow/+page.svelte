@@ -51,7 +51,7 @@
 	let newEdgeTarget = $state('');
 	let newEdgeOutput = $state<'default' | 'success' | 'error'>('default');
 
-	let canvasEl: HTMLDivElement | null = null;
+	let canvasEl = $state<HTMLDivElement | null>(null);
 	let draggingNodeId: string | null = null;
 	let dragOffset = { x: 0, y: 0 };
 
@@ -93,6 +93,18 @@
 
 	function selectedEdge(): WorkflowEdge | null {
 		return workflow?.edges.find((edge) => edge.id === selectedEdgeId) ?? null;
+	}
+
+	function nodeFieldId(field: string) {
+		return `node-${selectedNodeId ?? 'none'}-${field}`;
+	}
+
+	function edgeFieldId(field: string) {
+		return `edge-${selectedEdgeId ?? 'none'}-${field}`;
+	}
+
+	function actionFieldId(actionId: string, field: string) {
+		return `action-${actionId}-${field}`;
 	}
 
 	function canEdit(): boolean {
@@ -575,8 +587,16 @@
 											? 'border-indigo-500 ring-2 ring-indigo-200'
 											: 'border-gray-200'}"
 										style={`left: ${node.position.x}px; top: ${node.position.y}px;`}
+										role="button"
+										tabindex="0"
 										onpointerdown={(event) => startDrag(event, node)}
 										onclick={() => selectNodeById(node.id)}
+										onkeydown={(event) => {
+											if (event.key === 'Enter' || event.key === ' ') {
+												event.preventDefault();
+												selectNodeById(node.id);
+											}
+										}}
 									>
 										<div class="flex items-center justify-between border-b border-gray-100 px-3 py-2 text-sm font-semibold text-gray-800">
 											<span class="truncate">{node.label}</span>
@@ -618,8 +638,11 @@
 						{#if selectedNode()}
 							<div class="mt-4 space-y-4 text-sm">
 								<div>
-									<label class="text-xs font-semibold uppercase text-gray-500">Label</label>
+									<label for={nodeFieldId('label')} class="text-xs font-semibold uppercase text-gray-500">
+										Label
+									</label>
 									<input
+										id={nodeFieldId('label')}
 										class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 										value={selectedNode()?.label}
 										oninput={(event) => updateNodeLabel(selectedNodeId as string, event.currentTarget.value)}
@@ -630,8 +653,11 @@
 								{#if selectedNode()?.type === 'queue'}
 									{@const settings = selectedNode()?.settings as QueueSettings}
 									<div>
-										<label class="text-xs font-semibold uppercase text-gray-500">Provider</label>
+										<label for={nodeFieldId('provider')} class="text-xs font-semibold uppercase text-gray-500">
+											Provider
+										</label>
 										<select
+											id={nodeFieldId('provider')}
 											class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 											value={settings?.provider || 'clickup'}
 											onchange={(event) =>
@@ -647,8 +673,14 @@
 										</select>
 									</div>
 									<div>
-										<label class="text-xs font-semibold uppercase text-gray-500">Base Branch</label>
+										<label
+											for={nodeFieldId('base-branch')}
+											class="text-xs font-semibold uppercase text-gray-500"
+										>
+											Base Branch
+										</label>
 										<input
+											id={nodeFieldId('base-branch')}
 											class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 											value={settings?.baseBranch || ''}
 											oninput={(event) =>
@@ -660,8 +692,14 @@
 										/>
 									</div>
 									<div>
-										<label class="text-xs font-semibold uppercase text-gray-500">ClickUp List</label>
+										<label
+											for={nodeFieldId('clickup-list')}
+											class="text-xs font-semibold uppercase text-gray-500"
+										>
+											ClickUp List
+										</label>
 										<input
+											id={nodeFieldId('clickup-list')}
 											class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 											value={settings?.clickup?.listId || ''}
 											oninput={(event) =>
@@ -676,8 +714,14 @@
 										/>
 									</div>
 									<div>
-										<label class="text-xs font-semibold uppercase text-gray-500">Trigger Status</label>
+										<label
+											for={nodeFieldId('trigger-status')}
+											class="text-xs font-semibold uppercase text-gray-500"
+										>
+											Trigger Status
+										</label>
 										<input
+											id={nodeFieldId('trigger-status')}
 											class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 											value={settings?.clickup?.triggerStatus || ''}
 											oninput={(event) =>
@@ -694,8 +738,11 @@
 								{:else if selectedNode()?.type === 'agent'}
 									{@const settings = selectedNode()?.settings as AgentSettings}
 									<div>
-										<label class="text-xs font-semibold uppercase text-gray-500">Model</label>
+										<label for={nodeFieldId('model')} class="text-xs font-semibold uppercase text-gray-500">
+											Model
+										</label>
 										<select
+											id={nodeFieldId('model')}
 											class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 											value={settings?.model || 'codex'}
 											onchange={(event) =>
@@ -711,8 +758,14 @@
 										</select>
 									</div>
 									<div>
-										<label class="text-xs font-semibold uppercase text-gray-500">System Prompt</label>
+										<label
+											for={nodeFieldId('system-prompt')}
+											class="text-xs font-semibold uppercase text-gray-500"
+										>
+											System Prompt
+										</label>
 										<textarea
+											id={nodeFieldId('system-prompt')}
 											rows="4"
 											class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 											value={settings?.systemPrompt || ''}
@@ -726,8 +779,14 @@
 									</div>
 									<div class="grid grid-cols-2 gap-3">
 										<div>
-											<label class="text-xs font-semibold uppercase text-gray-500">ClickUp Status</label>
+											<label
+												for={nodeFieldId('clickup-status')}
+												class="text-xs font-semibold uppercase text-gray-500"
+											>
+												ClickUp Status
+											</label>
 											<input
+												id={nodeFieldId('clickup-status')}
 												class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 												value={settings?.clickupStatus || ''}
 												oninput={(event) =>
@@ -739,8 +798,14 @@
 											/>
 										</div>
 										<div>
-											<label class="text-xs font-semibold uppercase text-gray-500">Capacity</label>
+											<label
+												for={nodeFieldId('capacity')}
+												class="text-xs font-semibold uppercase text-gray-500"
+											>
+												Capacity
+											</label>
 											<input
+												id={nodeFieldId('capacity')}
 												type="number"
 												min="1"
 												class="mt-1 w-full rounded-md border border-gray-200 text-sm"
@@ -757,8 +822,11 @@
 								{:else}
 									{@const settings = selectedNode()?.settings as BucketSettings}
 									<div>
-										<label class="text-xs font-semibold uppercase text-gray-500">Bucket Type</label>
+										<label for={nodeFieldId('bucket')} class="text-xs font-semibold uppercase text-gray-500">
+											Bucket Type
+										</label>
 										<select
+											id={nodeFieldId('bucket')}
 											class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 											value={settings?.bucket || 'custom'}
 											onchange={(event) =>
@@ -787,8 +855,11 @@
 						{:else if selectedEdge()}
 							<div class="mt-4 space-y-4 text-sm">
 								<div>
-									<label class="text-xs font-semibold uppercase text-gray-500">Output</label>
+									<label for={edgeFieldId('output')} class="text-xs font-semibold uppercase text-gray-500">
+										Output
+									</label>
 									<select
+										id={edgeFieldId('output')}
 										class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 										value={selectedEdge()?.output || 'default'}
 										onchange={(event) =>
@@ -802,7 +873,7 @@
 								</div>
 								<div>
 									<div class="flex items-center justify-between">
-										<label class="text-xs font-semibold uppercase text-gray-500">Actions</label>
+										<span class="text-xs font-semibold uppercase text-gray-500">Actions</span>
 										<button
 											onclick={() => addAction(selectedEdgeId as string)}
 											disabled={!canEdit()}
@@ -821,6 +892,7 @@
 														onchange={(event) =>
 															updateActionType(selectedEdgeId as string, action.id, event.currentTarget.value)}
 														disabled={!canEdit()}
+														aria-label="Action type"
 													>
 														<option value="create_branch">Create Branch</option>
 														<option value="update_clickup_status">Update ClickUp Status</option>
@@ -835,8 +907,14 @@
 													</button>
 												</div>
 												{#if action.type === 'create_branch'}
-													<label class="mt-2 block text-xs font-semibold uppercase text-gray-500">Branch Prefix</label>
+													<label
+														for={actionFieldId(action.id, 'branch-prefix')}
+														class="mt-2 block text-xs font-semibold uppercase text-gray-500"
+													>
+														Branch Prefix
+													</label>
 													<input
+														id={actionFieldId(action.id, 'branch-prefix')}
 														class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 														value={(action.settings?.branchPrefix as string) || ''}
 														oninput={(event) =>
@@ -844,8 +922,14 @@
 														disabled={!canEdit()}
 													/>
 												{:else if action.type === 'update_clickup_status'}
-													<label class="mt-2 block text-xs font-semibold uppercase text-gray-500">Status</label>
+													<label
+														for={actionFieldId(action.id, 'status')}
+														class="mt-2 block text-xs font-semibold uppercase text-gray-500"
+													>
+														Status
+													</label>
 													<input
+														id={actionFieldId(action.id, 'status')}
 														class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 														value={(action.settings?.status as string) || ''}
 														oninput={(event) =>
@@ -853,8 +937,14 @@
 														disabled={!canEdit()}
 													/>
 												{:else}
-													<label class="mt-2 block text-xs font-semibold uppercase text-gray-500">Notes</label>
+													<label
+														for={actionFieldId(action.id, 'notes')}
+														class="mt-2 block text-xs font-semibold uppercase text-gray-500"
+													>
+														Notes
+													</label>
 													<input
+														id={actionFieldId(action.id, 'notes')}
 														class="mt-1 w-full rounded-md border border-gray-200 text-sm"
 														value={(action.settings?.notes as string) || ''}
 														oninput={(event) =>
