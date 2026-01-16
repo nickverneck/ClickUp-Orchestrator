@@ -14,6 +14,12 @@
 			icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />`
 		},
 		{
+			href: '/workflow',
+			label: 'Workflow',
+			icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7a3 3 0 013-3h3a3 3 0 013 3v2a3 3 0 01-3 3H9v2h6a3 3 0 013 3v2a3 3 0 01-3 3h-3a3 3 0 01-3-3v-2a3 3 0 013-3h1V9H7v2a3 3 0 01-3 3H3v-2h1a1 1 0 001-1V7z" />`,
+			experimental: true
+		},
+		{
 			href: '/voice',
 			label: 'Voice Assistant',
 			icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />`,
