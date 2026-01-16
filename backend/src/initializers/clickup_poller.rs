@@ -8,7 +8,10 @@ use loco_rs::{
     app::{AppContext, Initializer},
     Result,
 };
-use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+    Set,
+};
 use std::time::Duration;
 use tokio::time::interval;
 
@@ -92,7 +95,7 @@ impl ClickUpPollerInitializer {
         let now = chrono::Utc::now();
         let task_id = match pending.id {
             Some(existing_id) => {
-                let mut active = match orchestrator_tasks::Entity::find_by_id(existing_id)
+                let mut active: orchestrator_tasks::ActiveModel = match orchestrator_tasks::Entity::find_by_id(existing_id)
                     .one(db)
                     .await
                 {
