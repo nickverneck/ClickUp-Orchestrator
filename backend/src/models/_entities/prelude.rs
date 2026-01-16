@@ -5,3 +5,4 @@ pub use super::orchestrator_tasks::Entity as OrchestratorTasks;
 pub use super::process_sessions::Entity as ProcessSessions;
 pub use super::settings::Entity as Settings;
 pub use super::users::Entity as Users;
+pub use super::workflow_configs::Entity as WorkflowConfigs;

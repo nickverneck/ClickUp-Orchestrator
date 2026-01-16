@@ -7,3 +7,4 @@ pub mod orchestrator_tasks;
 pub mod process_sessions;
 pub mod settings;
 pub mod users;
+pub mod workflow_configs;

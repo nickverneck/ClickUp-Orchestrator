@@ -9,6 +9,7 @@ mod m20251228_205527_settings;
 mod m20260107_000001_add_task_output_log;
 mod m20260108_000001_orchestrator_task_logs;
 mod m20260112_000001_add_completion_status_setting;
+mod m20260312_000001_workflow_configs;
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -22,6 +23,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260107_000001_add_task_output_log::Migration),
             Box::new(m20260108_000001_orchestrator_task_logs::Migration),
             Box::new(m20260112_000001_add_completion_status_setting::Migration),
+            Box::new(m20260312_000001_workflow_configs::Migration),
             // inject-above (do not remove this comment)
         ]
     }
