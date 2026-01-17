@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
+	import { getListStatuses, type Status } from '$lib/api/clickup';
+	import { getSettings } from '$lib/api/settings';
 	import {
 		getWorkflow,
 		pauseWorkflow,
@@ -35,6 +37,8 @@
 
 	const NODE_WIDTH = 220;
 	const NODE_HEIGHT = 120;
+	const CONNECTOR_OFFSET_X = 2;
+	const AGENT_OUTPUT_OFFSET_Y = 32;
 
 	let workflow = $state<WorkflowConfig | null>(null);
 	let status = $state<WorkflowStatus>('paused');
@@ -51,9 +55,17 @@
 	let newEdgeTarget = $state('');
 	let newEdgeOutput = $state<'default' | 'success' | 'error'>('default');
 
+	let settingsDefaults = $state<Record<string, string>>({});
+	let clickupStatuses = $state<Status[]>([]);
+	let clickupStatusesLoading = $state(false);
+	let clickupStatusesError = $state<string | null>(null);
+	let activeListId = $state<string | null>(null);
+
 	let canvasEl = $state<HTMLDivElement | null>(null);
 	let draggingNodeId: string | null = null;
 	let dragOffset = { x: 0, y: 0 };
+	let connectFrom = $state<{ sourceId: string; output: 'default' | 'success' | 'error' } | null>(null);
+	let connectPosition = $state<{ x: number; y: number } | null>(null);
 
 	onMount(() => {
 		loadWorkflow();
@@ -63,8 +75,16 @@
 		}
 
 		const handleMove = (event: PointerEvent) => {
-			if (!draggingNodeId || !workflow || !canvasEl) return;
+			if (!canvasEl) return;
 			const rect = canvasEl.getBoundingClientRect();
+			if (connectFrom) {
+				connectPosition = {
+					x: event.clientX - rect.left,
+					y: event.clientY - rect.top
+				};
+				return;
+			}
+			if (!draggingNodeId || !workflow) return;
 			const x = event.clientX - rect.left - dragOffset.x;
 			const y = event.clientY - rect.top - dragOffset.y;
 			updateNodePosition(draggingNodeId, x, y);
@@ -72,6 +92,8 @@
 
 		const handleUp = () => {
 			draggingNodeId = null;
+			connectFrom = null;
+			connectPosition = null;
 		};
 
 		window.addEventListener('pointermove', handleMove);
@@ -107,6 +129,63 @@
 		return `action-${actionId}-${field}`;
 	}
 
+	function mergeQueueDefaults(settings: QueueSettings): QueueSettings {
+		const provider = settings.provider ?? 'clickup';
+		if (provider !== 'clickup') {
+			return { ...settings, provider };
+		}
+
+		const clickup = { ...settings.clickup };
+		const baseBranch = settings.baseBranch || settingsDefaults.dev_branch || 'dev';
+		const listId = clickup.listId || settingsDefaults.clickup_list_id || '';
+		const triggerStatus = clickup.triggerStatus || settingsDefaults.trigger_status || '';
+
+		return {
+			...settings,
+			provider,
+			baseBranch,
+			clickup: {
+				...clickup,
+				listId,
+				triggerStatus
+			}
+		};
+	}
+
+	function mergeAgentDefaults(settings: AgentSettings): AgentSettings {
+		return {
+			...settings,
+			model: settings.model || settingsDefaults.agent_model || 'codex',
+			clickupStatus: settings.clickupStatus || settingsDefaults.target_status || '',
+			capacity: settings.capacity ?? 1
+		};
+	}
+
+	function applyDefaultsToWorkflow(config: WorkflowConfig) {
+		let changed = false;
+		const nodes = config.nodes.map((node) => {
+			if (node.type === 'queue') {
+				const merged = mergeQueueDefaults(node.settings as QueueSettings);
+				if (JSON.stringify(merged) !== JSON.stringify(node.settings ?? {})) {
+					changed = true;
+				}
+				return { ...node, settings: merged as Record<string, unknown> };
+			}
+			if (node.type === 'agent') {
+				const merged = mergeAgentDefaults(node.settings as AgentSettings);
+				if (JSON.stringify(merged) !== JSON.stringify(node.settings ?? {})) {
+					changed = true;
+				}
+				return { ...node, settings: merged as Record<string, unknown> };
+			}
+			return node;
+		});
+		return {
+			config: changed ? { ...config, nodes } : config,
+			changed
+		};
+	}
+
 	function canEdit(): boolean {
 		return status === 'paused';
 	}
@@ -115,10 +194,12 @@
 		loading = true;
 		error = null;
 		try {
-			const response = await getWorkflow();
-			workflow = response.config;
+			const [defaults, response] = await Promise.all([getSettings(), getWorkflow()]);
+			settingsDefaults = defaults;
+			const applied = applyDefaultsToWorkflow(response.config);
+			workflow = applied.config;
 			status = response.status;
-			dirty = false;
+			dirty = applied.changed;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load workflow';
 		} finally {
@@ -178,18 +259,18 @@
 		const label = type === 'agent' ? 'Agent' : type === 'queue' ? 'Queue' : 'Bucket';
 		const settings =
 			type === 'queue'
-				? ({
+				? (mergeQueueDefaults({
 						provider: 'clickup',
-						baseBranch: 'dev',
-						clickup: { listId: '', triggerStatus: 'Ready for Dev' }
-					} as QueueSettings)
+						baseBranch: '',
+						clickup: { listId: '', triggerStatus: '' }
+					}) as QueueSettings)
 				: type === 'agent'
-						? ({
+						? (mergeAgentDefaults({
 								systemPrompt: '',
-								model: 'codex',
-								clickupStatus: 'In Development',
+								model: '',
+								clickupStatus: '',
 								capacity: 1
-							} as AgentSettings)
+							}) as AgentSettings)
 						: ({ bucket: 'custom' } as BucketSettings);
 
 		const node: WorkflowNode = {
@@ -225,9 +306,134 @@
 	function updateNodeSettings(id: string, settings: Record<string, unknown>) {
 		if (!workflow || !canEdit()) return;
 		const nodes = workflow.nodes.map((node) =>
-			node.id === id ? { ...node, settings } : node
+			node.id === id
+				? {
+						...node,
+						settings:
+							node.type === 'queue'
+								? (mergeQueueDefaults(settings as QueueSettings) as Record<string, unknown>)
+								: node.type === 'agent'
+									? (mergeAgentDefaults(settings as AgentSettings) as Record<string, unknown>)
+									: settings
+					}
+				: node
 		);
 		markDirty({ ...workflow, nodes });
+	}
+
+	function resolveClickupListId(nodeId: string | null): string | null {
+		if (!workflow) {
+			return settingsDefaults.clickup_list_id || null;
+		}
+		const node = workflow.nodes.find((item) => item.id === nodeId) ?? null;
+		if (!node) {
+			return settingsDefaults.clickup_list_id || null;
+		}
+		if (node.type === 'queue') {
+			const settings = node.settings as QueueSettings;
+			if (settings.provider !== 'clickup') {
+				return null;
+			}
+			return settings.clickup?.listId || settingsDefaults.clickup_list_id || null;
+		}
+		if (node.type === 'agent') {
+			const inboundEdges = workflow.edges.filter((edge) => edge.target === node.id);
+			for (const edge of inboundEdges) {
+				const sourceNode = workflow.nodes.find((item) => item.id === edge.source);
+				if (sourceNode?.type === 'queue') {
+					const settings = sourceNode.settings as QueueSettings;
+					if (settings.provider === 'clickup') {
+						return settings.clickup?.listId || settingsDefaults.clickup_list_id || null;
+					}
+				}
+			}
+			return settingsDefaults.clickup_list_id || null;
+		}
+		return settingsDefaults.clickup_list_id || null;
+	}
+
+	async function loadStatuses(listId: string) {
+		clickupStatusesLoading = true;
+		clickupStatusesError = null;
+		try {
+			clickupStatuses = await getListStatuses(listId);
+		} catch (e) {
+			clickupStatusesError = e instanceof Error ? e.message : 'Failed to load statuses';
+			clickupStatuses = [];
+		} finally {
+			clickupStatusesLoading = false;
+		}
+	}
+
+	$effect(() => {
+		const listId = resolveClickupListId(selectedNodeId);
+		if (listId === activeListId) {
+			return;
+		}
+		activeListId = listId;
+		if (listId) {
+			loadStatuses(listId);
+		} else {
+			clickupStatuses = [];
+			clickupStatusesError = null;
+		}
+	});
+
+	function startConnection(
+		event: PointerEvent,
+		node: WorkflowNode,
+		output: 'default' | 'success' | 'error'
+	) {
+		if (!canEdit() || !canvasEl) return;
+		event.stopPropagation();
+		event.preventDefault();
+		const rect = canvasEl.getBoundingClientRect();
+		connectFrom = { sourceId: node.id, output };
+		connectPosition = {
+			x: event.clientX - rect.left,
+			y: event.clientY - rect.top
+		};
+	}
+
+	function finishConnection(event: PointerEvent, targetId: string) {
+		if (!connectFrom || !workflow) return;
+		event.stopPropagation();
+		event.preventDefault();
+		const { sourceId, output } = connectFrom;
+		connectFrom = null;
+		connectPosition = null;
+		if (sourceId === targetId) {
+			return;
+		}
+		createEdge(sourceId, targetId, output);
+	}
+
+	function createEdge(
+		sourceId: string,
+		targetId: string,
+		output: 'default' | 'success' | 'error'
+	) {
+		if (!workflow || !canEdit()) return;
+		const normalizedOutput = output === 'default' ? null : output;
+		const exists = workflow.edges.some(
+			(edge) =>
+				edge.source === sourceId &&
+				edge.target === targetId &&
+				(edge.output ?? 'default') === (normalizedOutput ?? 'default')
+		);
+		if (exists) {
+			return;
+		}
+		const id = `edge-${Date.now().toString(36)}-${workflow.edges.length}`;
+		const edge: WorkflowEdge = {
+			id,
+			source: sourceId,
+			target: targetId,
+			output: normalizedOutput,
+			actions: []
+		};
+		markDirty({ ...workflow, edges: [...workflow.edges, edge] });
+		selectEdgeById(id);
 	}
 
 	function addEdge() {
@@ -237,16 +443,7 @@
 			return;
 		}
 		error = null;
-		const id = `edge-${Date.now().toString(36)}-${workflow.edges.length}`;
-		const edge: WorkflowEdge = {
-			id,
-			source: newEdgeSource,
-			target: newEdgeTarget,
-			output: newEdgeOutput === 'default' ? null : newEdgeOutput,
-			actions: []
-		};
-		markDirty({ ...workflow, edges: [...workflow.edges, edge] });
-		selectEdgeById(id);
+		createEdge(newEdgeSource, newEdgeTarget, newEdgeOutput);
 	}
 
 	function deleteSelectedEdge() {
@@ -335,6 +532,18 @@
 		return workflow?.nodes.find((node) => node.id === id);
 	}
 
+	function buildEdgePath(start: { x: number; y: number }, end: { x: number; y: number }) {
+		const distance = Math.max(120, Math.abs(end.x - start.x) / 2);
+		return `M ${start.x} ${start.y} C ${start.x + distance} ${start.y}, ${end.x - distance} ${end.y}, ${end.x} ${end.y}`;
+	}
+
+	function inputAnchor(node: WorkflowNode) {
+		return {
+			x: node.position.x - CONNECTOR_OFFSET_X,
+			y: node.position.y + NODE_HEIGHT / 2
+		};
+	}
+
 	function edgePath(edge: WorkflowEdge): { d: string; color: string } | null {
 		if (!workflow) return null;
 		const source = getNodeById(edge.source);
@@ -343,9 +552,8 @@
 
 		const output = edge.output ?? 'default';
 		const start = outputAnchor(source, output);
-		const end = { x: target.position.x, y: target.position.y + NODE_HEIGHT / 2 };
-		const distance = Math.max(120, Math.abs(end.x - start.x) / 2);
-		const d = `M ${start.x} ${start.y} C ${start.x + distance} ${start.y}, ${end.x - distance} ${end.y}, ${end.x} ${end.y}`;
+		const end = inputAnchor(target);
+		const d = buildEdgePath(start, end);
 		const color = output === 'success' ? '#16a34a' : output === 'error' ? '#dc2626' : '#64748b';
 		return { d, color };
 	}
@@ -353,13 +561,22 @@
 	function outputAnchor(node: WorkflowNode, output: string) {
 		if (node.type === 'agent') {
 			if (output === 'success') {
-				return { x: node.position.x + NODE_WIDTH, y: node.position.y + 30 };
+				return {
+					x: node.position.x + NODE_WIDTH + CONNECTOR_OFFSET_X,
+					y: node.position.y + AGENT_OUTPUT_OFFSET_Y
+				};
 			}
 			if (output === 'error') {
-				return { x: node.position.x + NODE_WIDTH, y: node.position.y + NODE_HEIGHT - 30 };
+				return {
+					x: node.position.x + NODE_WIDTH + CONNECTOR_OFFSET_X,
+					y: node.position.y + NODE_HEIGHT - AGENT_OUTPUT_OFFSET_Y
+				};
 			}
 		}
-		return { x: node.position.x + NODE_WIDTH, y: node.position.y + NODE_HEIGHT / 2 };
+		return {
+			x: node.position.x + NODE_WIDTH + CONNECTOR_OFFSET_X,
+			y: node.position.y + NODE_HEIGHT / 2
+		};
 	}
 
 	async function handleSave() {
@@ -577,6 +794,20 @@
 											/>
 										{/if}
 									{/each}
+									{#if connectFrom && connectPosition}
+										{@const sourceNode = getNodeById(connectFrom.sourceId)}
+										{#if sourceNode}
+											{@const previewStart = outputAnchor(sourceNode, connectFrom.output)}
+											{@const previewPath = buildEdgePath(previewStart, connectPosition)}
+											<path
+												d={previewPath}
+												stroke={connectFrom.output === 'success' ? '#16a34a' : connectFrom.output === 'error' ? '#dc2626' : '#64748b'}
+												stroke-width="2.5"
+												fill="none"
+												stroke-dasharray="6 6"
+											/>
+										{/if}
+									{/if}
 								{/if}
 							</svg>
 
@@ -614,12 +845,33 @@
 											{/if}
 										</div>
 
-										<div class="pointer-events-none absolute -left-2 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-gray-300"></div>
+										<button
+											type="button"
+											class="absolute -left-2 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-gray-300 p-0 cursor-crosshair"
+											onpointerdown={(event) => event.stopPropagation()}
+											onpointerup={(event) => finishConnection(event, node.id)}
+											aria-label={`Connect into ${node.label}`}
+										></button>
 										{#if node.type === 'agent'}
-											<div class="pointer-events-none absolute -right-2 top-[26px] h-3 w-3 rounded-full border-2 border-white bg-emerald-500"></div>
-											<div class="pointer-events-none absolute -right-2 bottom-[26px] h-3 w-3 rounded-full border-2 border-white bg-rose-500"></div>
+											<button
+												type="button"
+												class="absolute -right-2 top-[26px] h-3 w-3 rounded-full border-2 border-white bg-emerald-500 p-0 cursor-crosshair"
+												onpointerdown={(event) => startConnection(event, node, 'success')}
+												aria-label={`Start success connection from ${node.label}`}
+											></button>
+											<button
+												type="button"
+												class="absolute -right-2 bottom-[26px] h-3 w-3 rounded-full border-2 border-white bg-rose-500 p-0 cursor-crosshair"
+												onpointerdown={(event) => startConnection(event, node, 'error')}
+												aria-label={`Start error connection from ${node.label}`}
+											></button>
 										{:else}
-											<div class="pointer-events-none absolute -right-2 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400"></div>
+											<button
+												type="button"
+												class="absolute -right-2 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-slate-400 p-0 cursor-crosshair"
+												onpointerdown={(event) => startConnection(event, node, 'default')}
+												aria-label={`Start connection from ${node.label}`}
+											></button>
 										{/if}
 									</div>
 								{/each}
@@ -652,6 +904,7 @@
 
 								{#if selectedNode()?.type === 'queue'}
 									{@const settings = selectedNode()?.settings as QueueSettings}
+									{@const isClickupProvider = (settings?.provider || 'clickup') === 'clickup'}
 									<div>
 										<label for={nodeFieldId('provider')} class="text-xs font-semibold uppercase text-gray-500">
 											Provider
@@ -691,50 +944,85 @@
 											disabled={!canEdit()}
 										/>
 									</div>
-									<div>
-										<label
-											for={nodeFieldId('clickup-list')}
-											class="text-xs font-semibold uppercase text-gray-500"
-										>
-											ClickUp List
-										</label>
-										<input
-											id={nodeFieldId('clickup-list')}
-											class="mt-1 w-full rounded-md border border-gray-200 text-sm"
-											value={settings?.clickup?.listId || ''}
-											oninput={(event) =>
-												updateNodeSettings(selectedNodeId as string, {
-													...settings,
-													clickup: {
-														...settings?.clickup,
-														listId: event.currentTarget.value
-													}
-												})}
-											disabled={!canEdit()}
-										/>
-									</div>
-									<div>
-										<label
-											for={nodeFieldId('trigger-status')}
-											class="text-xs font-semibold uppercase text-gray-500"
-										>
-											Trigger Status
-										</label>
-										<input
-											id={nodeFieldId('trigger-status')}
-											class="mt-1 w-full rounded-md border border-gray-200 text-sm"
-											value={settings?.clickup?.triggerStatus || ''}
-											oninput={(event) =>
-												updateNodeSettings(selectedNodeId as string, {
-													...settings,
-													clickup: {
-														...settings?.clickup,
-														triggerStatus: event.currentTarget.value
-													}
-												})}
-											disabled={!canEdit()}
-										/>
-									</div>
+									{#if isClickupProvider}
+										<div>
+											<label
+												for={nodeFieldId('clickup-list')}
+												class="text-xs font-semibold uppercase text-gray-500"
+											>
+												ClickUp List
+											</label>
+											<input
+												id={nodeFieldId('clickup-list')}
+												class="mt-1 w-full rounded-md border border-gray-200 text-sm"
+												value={settings?.clickup?.listId || ''}
+												oninput={(event) =>
+													updateNodeSettings(selectedNodeId as string, {
+														...settings,
+														clickup: {
+															...settings?.clickup,
+															listId: event.currentTarget.value
+														}
+													})}
+												disabled={!canEdit()}
+											/>
+										</div>
+										<div>
+											<label
+												for={nodeFieldId('trigger-status')}
+												class="text-xs font-semibold uppercase text-gray-500"
+											>
+												Trigger Status
+											</label>
+											{#if clickupStatuses.length > 0}
+												<select
+													id={nodeFieldId('trigger-status')}
+													class="mt-1 w-full rounded-md border border-gray-200 text-sm disabled:bg-gray-100"
+													value={settings?.clickup?.triggerStatus || ''}
+													onchange={(event) =>
+														updateNodeSettings(selectedNodeId as string, {
+															...settings,
+															clickup: {
+																...settings?.clickup,
+																triggerStatus: event.currentTarget.value
+															}
+														})}
+													disabled={!canEdit() || clickupStatusesLoading}
+												>
+													<option value="">Select status...</option>
+													{#each clickupStatuses as status}
+														<option value={status.status}>{status.status}</option>
+													{/each}
+												</select>
+											{:else}
+												<input
+													id={nodeFieldId('trigger-status')}
+													class="mt-1 w-full rounded-md border border-gray-200 text-sm"
+													value={settings?.clickup?.triggerStatus || ''}
+													oninput={(event) =>
+														updateNodeSettings(selectedNodeId as string, {
+															...settings,
+															clickup: {
+																...settings?.clickup,
+																triggerStatus: event.currentTarget.value
+															}
+														})}
+													disabled={!canEdit() || clickupStatusesLoading}
+												/>
+											{/if}
+											<p class="mt-1 text-[11px] text-gray-500">
+												{#if !activeListId}
+													Select a ClickUp list to load statuses.
+												{:else if clickupStatusesLoading}
+													Loading statuses...
+												{:else if clickupStatusesError}
+													<span class="text-red-600">{clickupStatusesError}</span>
+												{:else}
+													Status that triggers task pickup.
+												{/if}
+											</p>
+										</div>
+									{/if}
 								{:else if selectedNode()?.type === 'agent'}
 									{@const settings = selectedNode()?.settings as AgentSettings}
 									<div>
@@ -785,17 +1073,47 @@
 											>
 												ClickUp Status
 											</label>
-											<input
-												id={nodeFieldId('clickup-status')}
-												class="mt-1 w-full rounded-md border border-gray-200 text-sm"
-												value={settings?.clickupStatus || ''}
-												oninput={(event) =>
-													updateNodeSettings(selectedNodeId as string, {
-														...settings,
-														clickupStatus: event.currentTarget.value
-													})}
-												disabled={!canEdit()}
-											/>
+											{#if clickupStatuses.length > 0}
+												<select
+													id={nodeFieldId('clickup-status')}
+													class="mt-1 w-full rounded-md border border-gray-200 text-sm disabled:bg-gray-100"
+													value={settings?.clickupStatus || ''}
+													onchange={(event) =>
+														updateNodeSettings(selectedNodeId as string, {
+															...settings,
+															clickupStatus: event.currentTarget.value
+														})}
+													disabled={!canEdit() || clickupStatusesLoading}
+												>
+													<option value="">Select status...</option>
+													{#each clickupStatuses as status}
+														<option value={status.status}>{status.status}</option>
+													{/each}
+												</select>
+											{:else}
+												<input
+													id={nodeFieldId('clickup-status')}
+													class="mt-1 w-full rounded-md border border-gray-200 text-sm"
+													value={settings?.clickupStatus || ''}
+													oninput={(event) =>
+														updateNodeSettings(selectedNodeId as string, {
+															...settings,
+															clickupStatus: event.currentTarget.value
+														})}
+													disabled={!canEdit() || clickupStatusesLoading}
+												/>
+											{/if}
+											<p class="mt-1 text-[11px] text-gray-500">
+												{#if !activeListId}
+													Select a ClickUp list to load statuses.
+												{:else if clickupStatusesLoading}
+													Loading statuses...
+												{:else if clickupStatusesError}
+													<span class="text-red-600">{clickupStatusesError}</span>
+												{:else}
+													Status to set when the agent finishes.
+												{/if}
+											</p>
 										</div>
 										<div>
 											<label
