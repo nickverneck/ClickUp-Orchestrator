@@ -38,7 +38,7 @@
 	const NODE_WIDTH = 220;
 	const NODE_HEIGHT = 120;
 	const CONNECTOR_OFFSET_X = 2;
-	const AGENT_OUTPUT_OFFSET_Y = 32;
+	const AGENT_OUTPUT_OFFSET_Y = 24;
 
 	let workflow = $state<WorkflowConfig | null>(null);
 	let status = $state<WorkflowStatus>('paused');
@@ -814,7 +814,7 @@
 							{#if workflow}
 								{#each workflow.nodes as node}
 									<div
-										class="absolute w-[220px] rounded-lg border bg-white shadow-sm {node.id === selectedNodeId
+										class="absolute h-[120px] w-[220px] rounded-lg border bg-white shadow-sm {node.id === selectedNodeId
 											? 'border-indigo-500 ring-2 ring-indigo-200'
 											: 'border-gray-200'}"
 										style={`left: ${node.position.x}px; top: ${node.position.y}px;`}
@@ -855,13 +855,13 @@
 										{#if node.type === 'agent'}
 											<button
 												type="button"
-												class="absolute -right-2 top-[26px] h-3 w-3 rounded-full border-2 border-white bg-emerald-500 p-0 cursor-crosshair"
+												class="absolute -right-2 top-[18px] h-3 w-3 rounded-full border-2 border-white bg-emerald-500 p-0 cursor-crosshair"
 												onpointerdown={(event) => startConnection(event, node, 'success')}
 												aria-label={`Start success connection from ${node.label}`}
 											></button>
 											<button
 												type="button"
-												class="absolute -right-2 bottom-[26px] h-3 w-3 rounded-full border-2 border-white bg-rose-500 p-0 cursor-crosshair"
+												class="absolute -right-2 bottom-[18px] h-3 w-3 rounded-full border-2 border-white bg-rose-500 p-0 cursor-crosshair"
 												onpointerdown={(event) => startConnection(event, node, 'error')}
 												aria-label={`Start error connection from ${node.label}`}
 											></button>
