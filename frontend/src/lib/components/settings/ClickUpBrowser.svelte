@@ -16,6 +16,8 @@
 		spaceId: string;
 		folderId: string;
 		listId: string;
+		compact?: boolean;
+		showHeading?: boolean;
 		onchange: (selection: {
 			workspaceId: string;
 			spaceId: string;
@@ -24,7 +26,15 @@
 		}) => void;
 	}
 
-	let { workspaceId, spaceId, folderId, listId, onchange }: Props = $props();
+	let {
+		workspaceId,
+		spaceId,
+		folderId,
+		listId,
+		compact = false,
+		showHeading = true,
+		onchange
+	}: Props = $props();
 
 	let workspaces = $state<Team[]>([]);
 	let spaces = $state<Space[]>([]);
@@ -163,7 +173,9 @@
 </script>
 
 <div class="space-y-4">
-	<h3 class="text-lg font-medium text-gray-900">ClickUp List Selection</h3>
+	{#if showHeading}
+		<h3 class="text-lg font-medium text-gray-900">ClickUp List Selection</h3>
+	{/if}
 
 	{#if error}
 		<div class="rounded-md bg-red-50 p-4">
@@ -192,7 +204,11 @@
 		</div>
 	{/if}
 
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+	<div
+		class={compact
+			? 'grid grid-cols-1 gap-4'
+			: 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'}
+	>
 		<!-- Workspace Selector -->
 		<div>
 			<label for="workspace" class="block text-sm font-medium text-gray-700">Workspace</label>

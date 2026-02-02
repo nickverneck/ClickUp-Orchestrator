@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
+	import ClickUpBrowser from '$lib/components/settings/ClickUpBrowser.svelte';
 	import { getListStatuses, type Status } from '$lib/api/clickup';
 	import { getSettings } from '$lib/api/settings';
 	import {
@@ -19,6 +20,9 @@
 		provider?: string;
 		baseBranch?: string;
 		clickup?: {
+			workspaceId?: string;
+			spaceId?: string;
+			folderId?: string;
 			listId?: string;
 			triggerStatus?: string;
 		};
@@ -136,8 +140,18 @@
 		}
 
 		const clickup = { ...settings.clickup };
+		const hasClickupHierarchy =
+			Boolean(clickup.workspaceId) || Boolean(clickup.spaceId) || Boolean(clickup.folderId);
 		const baseBranch = settings.baseBranch || settingsDefaults.dev_branch || 'dev';
-		const listId = clickup.listId || settingsDefaults.clickup_list_id || '';
+		const workspaceId = clickup.workspaceId || settingsDefaults.clickup_workspace_id || '';
+		const spaceId = clickup.spaceId || settingsDefaults.clickup_space_id || '';
+		const folderId = clickup.folderId || settingsDefaults.clickup_folder_id || '';
+		const listId =
+			clickup.listId && clickup.listId.length > 0
+				? clickup.listId
+				: hasClickupHierarchy
+					? ''
+					: settingsDefaults.clickup_list_id || '';
 		const triggerStatus = clickup.triggerStatus || settingsDefaults.trigger_status || '';
 
 		return {
@@ -146,6 +160,9 @@
 			baseBranch,
 			clickup: {
 				...clickup,
+				workspaceId,
+				spaceId,
+				folderId,
 				listId,
 				triggerStatus
 			}
@@ -262,7 +279,13 @@
 				? (mergeQueueDefaults({
 						provider: 'clickup',
 						baseBranch: '',
-						clickup: { listId: '', triggerStatus: '' }
+						clickup: {
+							workspaceId: '',
+							spaceId: '',
+							folderId: '',
+							listId: '',
+							triggerStatus: ''
+						}
 					}) as QueueSettings)
 				: type === 'agent'
 						? (mergeAgentDefaults({
@@ -321,7 +344,50 @@
 		markDirty({ ...workflow, nodes });
 	}
 
-	function resolveClickupListId(nodeId: string | null): string | null {
+	function resolveQueueListId(settings: QueueSettings): string | null {
+		if (settings.provider !== 'clickup') {
+			return null;
+		}
+		const clickup = settings.clickup ?? {};
+		const hasClickupHierarchy =
+			Boolean(clickup.workspaceId) || Boolean(clickup.spaceId) || Boolean(clickup.folderId);
+		if (clickup.listId && clickup.listId.length > 0) {
+			return clickup.listId;
+		}
+		if (hasClickupHierarchy) {
+			return null;
+		}
+		return settingsDefaults.clickup_list_id || null;
+	}
+
+	function resolveAgentListId(nodeId: string): string | null {
+		if (!workflow) {
+			return settingsDefaults.clickup_list_id || null;
+		}
+		const node = workflow.nodes.find((item) => item.id === nodeId) ?? null;
+		if (!node) {
+			return settingsDefaults.clickup_list_id || null;
+		}
+		const inboundEdges = workflow.edges.filter((edge) => edge.target === node.id);
+		let foundQueue = false;
+		for (const edge of inboundEdges) {
+			const sourceNode = workflow.nodes.find((item) => item.id === edge.source);
+			if (sourceNode?.type === 'queue') {
+				foundQueue = true;
+				const settings = sourceNode.settings as QueueSettings;
+				const listId = resolveQueueListId(settings);
+				if (listId) {
+					return listId;
+				}
+			}
+		}
+		if (foundQueue) {
+			return null;
+		}
+		return settingsDefaults.clickup_list_id || null;
+	}
+
+	function resolveClickupListIdForNode(nodeId: string | null): string | null {
 		if (!workflow) {
 			return settingsDefaults.clickup_list_id || null;
 		}
@@ -331,23 +397,44 @@
 		}
 		if (node.type === 'queue') {
 			const settings = node.settings as QueueSettings;
-			if (settings.provider !== 'clickup') {
-				return null;
-			}
-			return settings.clickup?.listId || settingsDefaults.clickup_list_id || null;
+			return resolveQueueListId(settings);
 		}
 		if (node.type === 'agent') {
-			const inboundEdges = workflow.edges.filter((edge) => edge.target === node.id);
-			for (const edge of inboundEdges) {
-				const sourceNode = workflow.nodes.find((item) => item.id === edge.source);
-				if (sourceNode?.type === 'queue') {
-					const settings = sourceNode.settings as QueueSettings;
-					if (settings.provider === 'clickup') {
-						return settings.clickup?.listId || settingsDefaults.clickup_list_id || null;
-					}
-				}
-			}
+			return resolveAgentListId(node.id);
+		}
+		return settingsDefaults.clickup_list_id || null;
+	}
+
+	function resolveClickupListIdForEdge(edgeId: string | null): string | null {
+		if (!workflow) {
 			return settingsDefaults.clickup_list_id || null;
+		}
+		if (!edgeId) {
+			return settingsDefaults.clickup_list_id || null;
+		}
+		const edge = workflow.edges.find((item) => item.id === edgeId) ?? null;
+		if (!edge) {
+			return settingsDefaults.clickup_list_id || null;
+		}
+		const sourceNode = workflow.nodes.find((item) => item.id === edge.source) ?? null;
+		if (!sourceNode) {
+			return settingsDefaults.clickup_list_id || null;
+		}
+		if (sourceNode.type === 'queue') {
+			return resolveQueueListId(sourceNode.settings as QueueSettings);
+		}
+		if (sourceNode.type === 'agent') {
+			return resolveAgentListId(sourceNode.id);
+		}
+		return settingsDefaults.clickup_list_id || null;
+	}
+
+	function resolveActiveClickupListId(): string | null {
+		if (selectedNodeId) {
+			return resolveClickupListIdForNode(selectedNodeId);
+		}
+		if (selectedEdgeId) {
+			return resolveClickupListIdForEdge(selectedEdgeId);
 		}
 		return settingsDefaults.clickup_list_id || null;
 	}
@@ -366,7 +453,7 @@
 	}
 
 	$effect(() => {
-		const listId = resolveClickupListId(selectedNodeId);
+		const listId = resolveActiveClickupListId();
 		if (listId === activeListId) {
 			return;
 		}
@@ -946,25 +1033,24 @@
 									</div>
 									{#if isClickupProvider}
 										<div>
-											<label
-												for={nodeFieldId('clickup-list')}
-												class="text-xs font-semibold uppercase text-gray-500"
-											>
-												ClickUp List
-											</label>
-											<input
-												id={nodeFieldId('clickup-list')}
-												class="mt-1 w-full rounded-md border border-gray-200 text-sm"
-												value={settings?.clickup?.listId || ''}
-												oninput={(event) =>
+											<ClickUpBrowser
+												workspaceId={settings?.clickup?.workspaceId || ''}
+												spaceId={settings?.clickup?.spaceId || ''}
+												folderId={settings?.clickup?.folderId || ''}
+												listId={settings?.clickup?.listId || ''}
+												compact={true}
+												showHeading={false}
+												onchange={(selection) =>
 													updateNodeSettings(selectedNodeId as string, {
 														...settings,
 														clickup: {
 															...settings?.clickup,
-															listId: event.currentTarget.value
+															workspaceId: selection.workspaceId,
+															spaceId: selection.spaceId,
+															folderId: selection.folderId,
+															listId: selection.listId
 														}
 													})}
-												disabled={!canEdit()}
 											/>
 										</div>
 										<div>
@@ -1246,14 +1332,41 @@
 													>
 														Status
 													</label>
-													<input
-														id={actionFieldId(action.id, 'status')}
-														class="mt-1 w-full rounded-md border border-gray-200 text-sm"
-														value={(action.settings?.status as string) || ''}
-														oninput={(event) =>
-															updateActionSetting(selectedEdgeId as string, action.id, 'status', event.currentTarget.value)}
-														disabled={!canEdit()}
-													/>
+													{#if clickupStatuses.length > 0}
+														<select
+															id={actionFieldId(action.id, 'status')}
+															class="mt-1 w-full rounded-md border border-gray-200 text-sm disabled:bg-gray-100"
+															value={(action.settings?.status as string) || ''}
+															onchange={(event) =>
+																updateActionSetting(selectedEdgeId as string, action.id, 'status', event.currentTarget.value)}
+															disabled={!canEdit() || clickupStatusesLoading}
+														>
+															<option value="">Select status...</option>
+															{#each clickupStatuses as status}
+																<option value={status.status}>{status.status}</option>
+															{/each}
+														</select>
+													{:else}
+														<input
+															id={actionFieldId(action.id, 'status')}
+															class="mt-1 w-full rounded-md border border-gray-200 text-sm"
+															value={(action.settings?.status as string) || ''}
+															oninput={(event) =>
+																updateActionSetting(selectedEdgeId as string, action.id, 'status', event.currentTarget.value)}
+															disabled={!canEdit() || clickupStatusesLoading}
+														/>
+													{/if}
+													<p class="mt-1 text-[11px] text-gray-500">
+														{#if !activeListId}
+															Select a ClickUp list to load statuses.
+														{:else if clickupStatusesLoading}
+															Loading statuses...
+														{:else if clickupStatusesError}
+															<span class="text-red-600">{clickupStatusesError}</span>
+														{:else}
+															Status to set when this action runs.
+														{/if}
+													</p>
 												{:else}
 													<label
 														for={actionFieldId(action.id, 'notes')}
