@@ -71,12 +71,27 @@ pub struct WorkflowAction {
 
 #[derive(Debug, Serialize)]
 pub struct WorkflowResponse {
+    pub id: i32,
+    pub name: String,
     pub status: WorkflowStatus,
     pub config: WorkflowConfig,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WorkflowListItem {
+    pub id: i32,
+    pub name: String,
+    pub status: WorkflowStatus,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateWorkflowRequest {
+    pub name: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UpdateWorkflowRequest {
+    pub name: Option<String>,
     pub config: WorkflowConfig,
 }
 
@@ -187,7 +202,52 @@ fn default_workflow_config() -> WorkflowConfig {
     }
 }
 
-async fn fetch_or_create_workflow(
+fn normalized_name(value: Option<String>, fallback: &str) -> String {
+    let trimmed = value.unwrap_or_default().trim().to_string();
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed
+    }
+}
+
+fn display_name(value: &str, id: i32) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        format!("Workflow {}", id)
+    } else {
+        trimmed.to_string()
+    }
+}
+
+async fn parse_config_or_reset(
+    db: &sea_orm::DatabaseConnection,
+    model: &workflow_configs::Model,
+) -> Result<WorkflowConfig> {
+    match serde_json::from_str::<WorkflowConfig>(&model.config) {
+        Ok(config) => Ok(config),
+        Err(_) => {
+            let fallback = default_workflow_config();
+            let mut active: workflow_configs::ActiveModel = model.clone().into();
+            active.config = Set(serde_json::to_string(&fallback)?);
+            active.updated_at = Set(chrono::Utc::now().into());
+            active.update(db).await?;
+            Ok(fallback)
+        }
+    }
+}
+
+async fn fetch_workflow_by_id(
+    db: &sea_orm::DatabaseConnection,
+    id: i32,
+) -> Result<workflow_configs::Model> {
+    workflow_configs::Entity::find_by_id(id)
+        .one(db)
+        .await?
+        .ok_or(Error::NotFound)
+}
+
+async fn fetch_or_create_default_workflow(
     db: &sea_orm::DatabaseConnection,
 ) -> Result<(workflow_configs::Model, WorkflowStatus, WorkflowConfig)> {
     if let Some(model) = workflow_configs::Entity::find()
@@ -196,23 +256,14 @@ async fn fetch_or_create_workflow(
         .await?
     {
         let status = WorkflowStatus::from_db(&model.status);
-        let config = match serde_json::from_str::<WorkflowConfig>(&model.config) {
-            Ok(config) => config,
-            Err(_) => {
-                let fallback = default_workflow_config();
-                let mut active: workflow_configs::ActiveModel = model.clone().into();
-                active.config = Set(serde_json::to_string(&fallback)?);
-                active.updated_at = Set(chrono::Utc::now().into());
-                active.update(db).await?;
-                fallback
-            }
-        };
+        let config = parse_config_or_reset(db, &model).await?;
         return Ok((model, status, config));
     }
 
     let default_config = default_workflow_config();
     let now = chrono::Utc::now();
     let record = workflow_configs::ActiveModel {
+        name: Set("Default Workflow".to_string()),
         status: Set(WorkflowStatus::Paused.as_str().to_string()),
         config: Set(serde_json::to_string(&default_config)?),
         created_at: Set(now.into()),
@@ -225,17 +276,71 @@ async fn fetch_or_create_workflow(
 }
 
 #[debug_handler]
-async fn get_workflow(State(ctx): State<AppContext>) -> Result<Response> {
-    let (_, status, config) = fetch_or_create_workflow(&ctx.db).await?;
-    format::json(WorkflowResponse { status, config })
+async fn list_workflows(State(ctx): State<AppContext>) -> Result<Response> {
+    let workflows = workflow_configs::Entity::find()
+        .order_by_desc(workflow_configs::Column::UpdatedAt)
+        .all(&ctx.db)
+        .await?
+        .into_iter()
+        .map(|model| WorkflowListItem {
+            id: model.id,
+            name: display_name(&model.name, model.id),
+            status: WorkflowStatus::from_db(&model.status),
+        })
+        .collect::<Vec<_>>();
+
+    format::json(workflows)
+}
+
+#[debug_handler]
+async fn create_workflow(
+    State(ctx): State<AppContext>,
+    Json(params): Json<CreateWorkflowRequest>,
+) -> Result<Response> {
+    let name = normalized_name(params.name, "New Workflow");
+    let config = default_workflow_config();
+    let now = chrono::Utc::now();
+    let record = workflow_configs::ActiveModel {
+        name: Set(name.clone()),
+        status: Set(WorkflowStatus::Paused.as_str().to_string()),
+        config: Set(serde_json::to_string(&config)?),
+        created_at: Set(now.into()),
+        updated_at: Set(now.into()),
+        ..Default::default()
+    };
+    let inserted = record.insert(&ctx.db).await?;
+
+    format::json(WorkflowResponse {
+        id: inserted.id,
+        name,
+        status: WorkflowStatus::Paused,
+        config,
+    })
+}
+
+#[debug_handler]
+async fn get_workflow(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Response> {
+    let model = fetch_workflow_by_id(&ctx.db, id).await?;
+    let status = WorkflowStatus::from_db(&model.status);
+    let config = parse_config_or_reset(&ctx.db, &model).await?;
+    let name = display_name(&model.name, model.id);
+
+    format::json(WorkflowResponse {
+        id: model.id,
+        name,
+        status,
+        config,
+    })
 }
 
 #[debug_handler]
 async fn update_workflow(
     State(ctx): State<AppContext>,
+    Path(id): Path<i32>,
     Json(params): Json<UpdateWorkflowRequest>,
 ) -> Result<Response> {
-    let (model, status, _) = fetch_or_create_workflow(&ctx.db).await?;
+    let model = fetch_workflow_by_id(&ctx.db, id).await?;
+    let status = WorkflowStatus::from_db(&model.status);
 
     if status == WorkflowStatus::Running {
         return Err(Error::BadRequest(
@@ -244,53 +349,180 @@ async fn update_workflow(
     }
 
     let mut active: workflow_configs::ActiveModel = model.into();
+    if let Some(name) = params.name {
+        let trimmed = name.trim();
+        if !trimmed.is_empty() {
+            active.name = Set(trimmed.to_string());
+        }
+    }
     active.config = Set(serde_json::to_string(&params.config)?);
     active.updated_at = Set(chrono::Utc::now().into());
-    active.update(&ctx.db).await?;
+    let updated = active.update(&ctx.db).await?;
+    let name = display_name(&updated.name, updated.id);
 
     format::json(WorkflowResponse {
+        id: updated.id,
+        name,
         status,
         config: params.config,
     })
 }
 
-async fn set_status(
+#[debug_handler]
+async fn delete_workflow(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Response> {
+    let model = fetch_workflow_by_id(&ctx.db, id).await?;
+    let status = WorkflowStatus::from_db(&model.status);
+    if status == WorkflowStatus::Running {
+        return Err(Error::BadRequest(
+            "Workflow is running. Pause before deleting.".to_string(),
+        ));
+    }
+    workflow_configs::Entity::delete_by_id(id).exec(&ctx.db).await?;
+    format::json(json!({ "success": true }))
+}
+
+async fn set_status_by_id(
     ctx: &AppContext,
+    id: i32,
     status: WorkflowStatus,
 ) -> Result<Response> {
-    let (model, _, config) = fetch_or_create_workflow(&ctx.db).await?;
+    let model = fetch_workflow_by_id(&ctx.db, id).await?;
+    let config = parse_config_or_reset(&ctx.db, &model).await?;
+    let name = display_name(&model.name, model.id);
     let mut active: workflow_configs::ActiveModel = model.into();
     active.status = Set(status.as_str().to_string());
     active.updated_at = Set(chrono::Utc::now().into());
     active.update(&ctx.db).await?;
 
-    format::json(WorkflowResponse { status, config })
+    format::json(WorkflowResponse {
+        id,
+        name,
+        status,
+        config,
+    })
 }
 
 #[debug_handler]
 async fn update_status(
     State(ctx): State<AppContext>,
+    Path(id): Path<i32>,
     Json(params): Json<UpdateWorkflowStatusRequest>,
 ) -> Result<Response> {
-    set_status(&ctx, params.status).await
+    set_status_by_id(&ctx, id, params.status).await
 }
 
 #[debug_handler]
-async fn start_workflow(State(ctx): State<AppContext>) -> Result<Response> {
-    set_status(&ctx, WorkflowStatus::Running).await
+async fn start_workflow(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Response> {
+    set_status_by_id(&ctx, id, WorkflowStatus::Running).await
 }
 
 #[debug_handler]
-async fn pause_workflow(State(ctx): State<AppContext>) -> Result<Response> {
-    set_status(&ctx, WorkflowStatus::Paused).await
+async fn pause_workflow(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Response> {
+    set_status_by_id(&ctx, id, WorkflowStatus::Paused).await
+}
+
+#[debug_handler]
+async fn get_default_workflow(State(ctx): State<AppContext>) -> Result<Response> {
+    let (model, status, config) = fetch_or_create_default_workflow(&ctx.db).await?;
+    let name = display_name(&model.name, model.id);
+    format::json(WorkflowResponse {
+        id: model.id,
+        name,
+        status,
+        config,
+    })
+}
+
+#[debug_handler]
+async fn update_default_workflow(
+    State(ctx): State<AppContext>,
+    Json(params): Json<UpdateWorkflowRequest>,
+) -> Result<Response> {
+    let (model, status, _) = fetch_or_create_default_workflow(&ctx.db).await?;
+
+    if status == WorkflowStatus::Running {
+        return Err(Error::BadRequest(
+            "Workflow is running. Pause before editing.".to_string(),
+        ));
+    }
+
+    let mut active: workflow_configs::ActiveModel = model.into();
+    if let Some(name) = params.name {
+        let trimmed = name.trim();
+        if !trimmed.is_empty() {
+            active.name = Set(trimmed.to_string());
+        }
+    }
+    active.config = Set(serde_json::to_string(&params.config)?);
+    active.updated_at = Set(chrono::Utc::now().into());
+    let updated = active.update(&ctx.db).await?;
+    let name = display_name(&updated.name, updated.id);
+
+    format::json(WorkflowResponse {
+        id: updated.id,
+        name,
+        status,
+        config: params.config,
+    })
+}
+
+async fn set_status_for_default(
+    ctx: &AppContext,
+    status: WorkflowStatus,
+) -> Result<Response> {
+    let (model, _, config) = fetch_or_create_default_workflow(&ctx.db).await?;
+    let id = model.id;
+    let name = display_name(&model.name, id);
+    let mut active: workflow_configs::ActiveModel = model.into();
+    active.status = Set(status.as_str().to_string());
+    active.updated_at = Set(chrono::Utc::now().into());
+    active.update(&ctx.db).await?;
+
+    format::json(WorkflowResponse {
+        id,
+        name,
+        status,
+        config,
+    })
+}
+
+#[debug_handler]
+async fn update_default_status(
+    State(ctx): State<AppContext>,
+    Json(params): Json<UpdateWorkflowStatusRequest>,
+) -> Result<Response> {
+    set_status_for_default(&ctx, params.status).await
+}
+
+#[debug_handler]
+async fn start_default_workflow(State(ctx): State<AppContext>) -> Result<Response> {
+    set_status_for_default(&ctx, WorkflowStatus::Running).await
+}
+
+#[debug_handler]
+async fn pause_default_workflow(State(ctx): State<AppContext>) -> Result<Response> {
+    set_status_for_default(&ctx, WorkflowStatus::Paused).await
 }
 
 pub fn routes() -> Routes {
     Routes::new()
+        .prefix("/api/workflows")
+        .add("/", get(list_workflows))
+        .add("/", post(create_workflow))
+        .add("/{id}", get(get_workflow))
+        .add("/{id}", put(update_workflow))
+        .add("/{id}", delete(delete_workflow))
+        .add("/{id}/status", put(update_status))
+        .add("/{id}/start", post(start_workflow))
+        .add("/{id}/pause", post(pause_workflow))
+}
+
+pub fn legacy_routes() -> Routes {
+    Routes::new()
         .prefix("/api/workflow")
-        .add("/", get(get_workflow))
-        .add("/", put(update_workflow))
-        .add("/status", put(update_status))
-        .add("/start", post(start_workflow))
-        .add("/pause", post(pause_workflow))
+        .add("/", get(get_default_workflow))
+        .add("/", put(update_default_workflow))
+        .add("/status", put(update_default_status))
+        .add("/start", post(start_default_workflow))
+        .add("/pause", post(pause_default_workflow))
 }

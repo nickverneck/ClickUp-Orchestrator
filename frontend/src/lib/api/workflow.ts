@@ -1,6 +1,6 @@
 // Workflow API
 
-import { get, post, put } from './client';
+import { del, get, post, put } from './client';
 
 export type WorkflowStatus = 'running' | 'paused';
 
@@ -37,27 +37,54 @@ export interface WorkflowConfig {
 	edges: WorkflowEdge[];
 }
 
+export interface WorkflowSummary {
+	id: number;
+	name: string;
+	status: WorkflowStatus;
+}
+
 export interface WorkflowResponse {
+	id: number;
+	name: string;
 	status: WorkflowStatus;
 	config: WorkflowConfig;
 }
 
-export async function getWorkflow(): Promise<WorkflowResponse> {
-	return get<WorkflowResponse>('/workflow');
+export async function getWorkflows(): Promise<WorkflowSummary[]> {
+	return get<WorkflowSummary[]>('/workflows');
 }
 
-export async function updateWorkflow(config: WorkflowConfig): Promise<WorkflowResponse> {
-	return put<WorkflowResponse>('/workflow', { config });
+export async function createWorkflow(name?: string): Promise<WorkflowResponse> {
+	return post<WorkflowResponse>('/workflows', name ? { name } : undefined);
 }
 
-export async function setWorkflowStatus(status: WorkflowStatus): Promise<WorkflowResponse> {
-	return put<WorkflowResponse>('/workflow/status', { status });
+export async function getWorkflow(id: number): Promise<WorkflowResponse> {
+	return get<WorkflowResponse>(`/workflows/${id}`);
 }
 
-export async function startWorkflow(): Promise<WorkflowResponse> {
-	return post<WorkflowResponse>('/workflow/start');
+export async function updateWorkflow(
+	id: number,
+	config: WorkflowConfig,
+	name?: string
+): Promise<WorkflowResponse> {
+	return put<WorkflowResponse>(`/workflows/${id}`, { config, name });
 }
 
-export async function pauseWorkflow(): Promise<WorkflowResponse> {
-	return post<WorkflowResponse>('/workflow/pause');
+export async function deleteWorkflow(id: number): Promise<{ success: boolean }> {
+	return del<{ success: boolean }>(`/workflows/${id}`);
+}
+
+export async function setWorkflowStatus(
+	id: number,
+	status: WorkflowStatus
+): Promise<WorkflowResponse> {
+	return put<WorkflowResponse>(`/workflows/${id}/status`, { status });
+}
+
+export async function startWorkflow(id: number): Promise<WorkflowResponse> {
+	return post<WorkflowResponse>(`/workflows/${id}/start`);
+}
+
+export async function pauseWorkflow(id: number): Promise<WorkflowResponse> {
+	return post<WorkflowResponse>(`/workflows/${id}/pause`);
 }
