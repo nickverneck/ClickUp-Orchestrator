@@ -1,6 +1,7 @@
 //! ClickUp Poller Initializer
 //!
 //! Starts a background task that polls ClickUp for new tasks and processes them.
+//! Now supports multiple projects with per-project ClickUp configurations.
 
 use async_trait::async_trait;
 use axum::Router;
@@ -15,7 +16,7 @@ use sea_orm::{
 use std::time::Duration;
 use tokio::time::interval;
 
-use crate::models::_entities::{orchestrator_tasks, settings};
+use crate::models::_entities::{orchestrator_tasks, projects, settings};
 use crate::services::clickup::{priority_to_int, ClickUpClient};
 use crate::services::process_manager::PROCESS_MANAGER;
 use crate::services::task_logs::{
@@ -63,6 +64,7 @@ impl ClickUpPollerInitializer {
         dev_branch: &str,
         agent_prompt: &Option<String>,
         agent_model: &str,
+        project_id: Option<i32>,
     ) -> Result<i32, ()> {
         tracing::info!(
             "Processing task: {} ({})",
@@ -153,6 +155,7 @@ impl ClickUpPollerInitializer {
                     time_spent_ms: Set(0),
                     started_at: Set(Some(now.into())),
                     completed_at: Set(None),
+                    project_id: Set(project_id),
                     created_at: Set(now.into()),
                     updated_at: Set(now.into()),
                     ..Default::default()
@@ -456,9 +459,69 @@ impl ClickUpPollerInitializer {
     async fn poll_and_process(ctx: AppContext) {
         let db = &ctx.db;
 
-        // Get settings
+        // First, try new multi-project approach
+        let projects_result = projects::Entity::find()
+            .filter(projects::Column::Status.eq("active"))
+            .all(db)
+            .await;
+
+        match projects_result {
+            Ok(active_projects) if !active_projects.is_empty() => {
+                // Process each active project
+                for project in active_projects {
+                    Self::poll_and_process_project(db, &project).await;
+                }
+            }
+            _ => {
+                // Fall back to legacy single-project mode
+                Self::poll_and_process_legacy(db).await;
+            }
+        }
+    }
+
+    async fn poll_and_process_project(
+        db: &sea_orm::DatabaseConnection,
+        project: &projects::Model,
+    ) {
+        let list_id = match project.clickup_list_id.as_deref() {
+            Some(id) if !id.is_empty() => id.to_string(),
+            _ => {
+                tracing::debug!(
+                    "Project {} has no ClickUp list configured, skipping",
+                    project.name
+                );
+                return;
+            }
+        };
+
+        let trigger_status = "Ready for Dev".to_string();  // Could be configurable per project
+        let target_status = "In Development".to_string();  // Could be configurable per project
+        let parallel_limit = project.parallel_limit as usize;
+        let target_repo_path = project.repo_path.clone();
+        let dev_branch = project.dev_branch.clone();
+        let agent_prompt = project.agent_prompt.clone();
+        let agent_model = project.agent_model.clone();
+        let project_id = project.id;
+
+        Self::poll_and_process_list(
+            db,
+            &list_id,
+            &trigger_status,
+            &target_status,
+            parallel_limit,
+            &target_repo_path,
+            &dev_branch,
+            &agent_prompt,
+            &agent_model,
+            Some(project_id),
+        )
+        .await;
+    }
+
+    async fn poll_and_process_legacy(db: &sea_orm::DatabaseConnection) {
+        // Get global settings (legacy single-project mode)
         let Some(list_id) = Self::get_setting(db, "clickup_list_id").await else {
-            tracing::debug!("No ClickUp list configured, skipping poll");
+            tracing::debug!("No ClickUp list configured (legacy), skipping poll");
             return;
         };
 
@@ -481,7 +544,7 @@ impl ClickUpPollerInitializer {
         {
             Some(p) if !p.is_empty() => p,
             _ => {
-                tracing::debug!("No target repo path configured, skipping poll");
+                tracing::debug!("No target repo path configured (legacy), skipping poll");
                 return;
             }
         };
@@ -490,15 +553,48 @@ impl ClickUpPollerInitializer {
             .await
             .unwrap_or_else(|| "dev".to_string());
 
-        // Get agent prompt (global instructions to combine with task description)
         let agent_prompt = Self::get_setting(db, "agent_prompt").await;
         let agent_model = Self::get_setting(db, "agent_model")
             .await
             .unwrap_or_else(|| "claude".to_string());
 
-        // Check how many tasks are currently in progress
-        let in_progress_count = orchestrator_tasks::Entity::find()
-            .filter(orchestrator_tasks::Column::Status.eq("in_progress"))
+        Self::poll_and_process_list(
+            db,
+            &list_id,
+            &trigger_status,
+            &target_status,
+            parallel_limit,
+            &target_repo_path,
+            &dev_branch,
+            &agent_prompt,
+            &agent_model,
+            None,
+        )
+        .await;
+    }
+
+    async fn poll_and_process_list(
+        db: &sea_orm::DatabaseConnection,
+        list_id: &str,
+        trigger_status: &str,
+        target_status: &str,
+        parallel_limit: usize,
+        target_repo_path: &str,
+        dev_branch: &str,
+        agent_prompt: &Option<String>,
+        agent_model: &str,
+        project_id: Option<i32>,
+    ) {
+
+        // Check how many tasks are currently in progress (for this project)
+        let mut in_progress_query = orchestrator_tasks::Entity::find()
+            .filter(orchestrator_tasks::Column::Status.eq("in_progress"));
+
+        if let Some(pid) = project_id {
+            in_progress_query = in_progress_query.filter(orchestrator_tasks::Column::ProjectId.eq(pid));
+        }
+
+        let in_progress_count = in_progress_query
             .count(db)
             .await
             .unwrap_or(0) as usize;
@@ -522,14 +618,17 @@ impl ClickUpPollerInitializer {
         };
 
         if available_slots > 0 {
-            let queued_tasks = match orchestrator_tasks::Entity::find()
+            let mut queued_query = orchestrator_tasks::Entity::find()
                 .filter(orchestrator_tasks::Column::Status.eq("queued"))
                 .order_by_asc(orchestrator_tasks::Column::Priority)
                 .order_by_asc(orchestrator_tasks::Column::CreatedAt)
-                .limit(available_slots as u64)
-                .all(db)
-                .await
-            {
+                .limit(available_slots as u64);
+
+            if let Some(pid) = project_id {
+                queued_query = queued_query.filter(orchestrator_tasks::Column::ProjectId.eq(pid));
+            }
+
+            let queued_tasks = match queued_query.all(db).await {
                 Ok(tasks) => tasks,
                 Err(e) => {
                     tracing::error!("Failed to load queued tasks: {}", e);
@@ -552,12 +651,13 @@ impl ClickUpPollerInitializer {
                     db,
                     &client,
                     pending,
-                    &trigger_status,
-                    &target_status,
-                    &target_repo_path,
-                    &dev_branch,
-                    &agent_prompt,
-                    &agent_model,
+                    trigger_status,
+                    target_status,
+                    target_repo_path,
+                    dev_branch,
+                    agent_prompt,
+                    agent_model,
+                    project_id,
                 )
                 .await
                 .is_ok()
@@ -623,12 +723,13 @@ impl ClickUpPollerInitializer {
                     db,
                     &client,
                     pending,
-                    &trigger_status,
-                    &target_status,
-                    &target_repo_path,
-                    &dev_branch,
-                    &agent_prompt,
-                    &agent_model,
+                    trigger_status,
+                    target_status,
+                    target_repo_path,
+                    dev_branch,
+                    agent_prompt,
+                    agent_model,
+                    project_id,
                 )
                 .await
                 .is_ok()
@@ -648,6 +749,7 @@ impl ClickUpPollerInitializer {
                     time_spent_ms: Set(0),
                     started_at: Set(None),
                     completed_at: Set(None),
+                    project_id: Set(project_id),
                     created_at: Set(now.into()),
                     updated_at: Set(now.into()),
                     ..Default::default()

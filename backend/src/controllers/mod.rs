@@ -2,6 +2,7 @@ pub mod auth;
 pub mod clickup;
 pub mod files;
 pub mod git;
+pub mod projects;
 pub mod settings;
 pub mod setup;
 pub mod tasks;

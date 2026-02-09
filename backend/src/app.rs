@@ -70,6 +70,7 @@ impl Hooks for App {
             .add_route(controllers::voice::routes())
             .add_route(controllers::files::routes())
             .add_route(controllers::ui_refinements::routes())
+            .add_route(controllers::projects::routes())
             .add_route(controllers::workflow::routes())
             .add_route(controllers::workflow::legacy_routes())
             .add_route(

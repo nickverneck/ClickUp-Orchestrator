@@ -73,6 +73,7 @@ impl From<orchestrator_tasks::Model> for TaskResponse {
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
     pub status: Option<String>,
+    pub project_id: Option<i32>,
 }
 
 fn sanitize_worktree_name(name: &str) -> String {
@@ -121,6 +122,10 @@ async fn list(State(ctx): State<AppContext>, Query(query): Query<ListQuery>) -> 
 
     if let Some(status) = &query.status {
         find = find.filter(orchestrator_tasks::Column::Status.eq(status));
+    }
+
+    if let Some(project_id) = query.project_id {
+        find = find.filter(orchestrator_tasks::Column::ProjectId.eq(project_id));
     }
 
     let tasks: Vec<TaskResponse> = find
