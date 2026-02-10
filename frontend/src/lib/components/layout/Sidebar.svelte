@@ -1,52 +1,92 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { useCurrentProject } from '$lib/stores/project.svelte';
+	import { listProjects } from '$lib/api/projects';
+	import ProjectSelector from '../projects/ProjectSelector.svelte';
 
 	interface Props {
 		collapsed?: boolean;
 	}
 
 	let { collapsed = $bindable(false) }: Props = $props();
+	const projectStore = useCurrentProject();
+	let projects = $state([]);
+	let loadingProjects = $state(true);
 
-	const navItems = [
-		{
-			href: '/',
-			label: 'Dashboard',
-			icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />`
-		},
-		{
-			href: '/workflow',
-			label: 'Workflows',
-			icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7a3 3 0 013-3h3a3 3 0 013 3v2a3 3 0 01-3 3H9v2h6a3 3 0 013 3v2a3 3 0 01-3 3h-3a3 3 0 01-3-3v-2a3 3 0 013-3h1V9H7v2a3 3 0 01-3 3H3v-2h1a1 1 0 001-1V7z" />`,
-			experimental: true
-		},
-		{
-			href: '/voice',
-			label: 'Voice Assistant',
-			icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />`,
-			experimental: true
-		},
-		{
-			href: '/ui-refinements',
-			label: 'UI Modifier',
-			icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />`,
-			experimental: true
-		},
-		{
-			href: '/editor',
-			label: 'File Editor',
-			icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />`,
-			experimental: true
-		},
-		{
-			href: '/settings',
-			label: 'Settings',
-			icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />`
+	// Load projects on mount
+	$effect.pre(() => {
+		loadProjects();
+	});
+
+	async function loadProjects() {
+		try {
+			projects = await projectStore.getAllProjects();
+		} catch (e) {
+			console.error('Failed to load projects:', e);
+		} finally {
+			loadingProjects = false;
 		}
-	];
+	}
+
+	const getNavItems = () => {
+		const projectId = projectStore.currentProjectId;
+		const projectPath = projectId ? `/projects/${projectId}` : '';
+
+		return [
+			{
+				href: '/projects',
+				label: 'All Projects',
+				icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />`
+			},
+			...(projectId
+				? [
+						{
+							href: `${projectPath}`,
+							label: 'Dashboard',
+							icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />`
+						},
+						{
+							href: `${projectPath}/workflows`,
+							label: 'Workflows',
+							icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7a3 3 0 013-3h3a3 3 0 013 3v2a3 3 0 01-3 3H9v2h6a3 3 0 013 3v2a3 3 0 01-3 3h-3a3 3 0 01-3-3v-2a3 3 0 013-3h1V9H7v2a3 3 0 01-3 3H3v-2h1a1 1 0 001-1V7z" />`,
+							experimental: false
+						},
+						{
+							href: `${projectPath}/settings`,
+							label: 'Project Settings',
+							icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />`
+						}
+					]
+				: []),
+			{
+				href: '/voice',
+				label: 'Voice Assistant',
+				icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />`,
+				experimental: true
+			},
+			{
+				href: '/ui-refinements',
+				label: 'UI Modifier',
+				icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />`,
+				experimental: true
+			},
+			{
+				href: '/editor',
+				label: 'File Editor',
+				icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />`,
+				experimental: true
+			},
+			{
+				href: '/settings',
+				label: 'Global Settings',
+				icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />`
+			}
+		];
+	};
 
 	function isActive(href: string): boolean {
-		if (href === '/') {
-			return $page.url.pathname === '/' || $page.url.pathname.startsWith('/task/');
+		if (href === '/projects') {
+			return $page.url.pathname === '/projects' || $page.url.pathname === '/';
 		}
 		return $page.url.pathname.startsWith(href);
 	}
@@ -89,9 +129,23 @@
 		</button>
 	</div>
 
+	<!-- Project Selector -->
+	<div class="px-2 py-3 border-b border-gray-800">
+		{#if !collapsed && !loadingProjects}
+			<div class="text-xs text-gray-400 px-1 mb-2">Current Project</div>
+			<ProjectSelector {projects} />
+		{:else if collapsed}
+			<div class="flex justify-center">
+				<svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+				</svg>
+			</div>
+		{/if}
+	</div>
+
 	<!-- Navigation -->
 	<nav class="flex-1 py-4 px-2 space-y-1">
-		{#each navItems as item}
+		{#each getNavItems() as item}
 			<a
 				href={item.href}
 				class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors

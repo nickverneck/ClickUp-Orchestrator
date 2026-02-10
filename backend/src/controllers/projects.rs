@@ -1,7 +1,7 @@
 //! Projects controller for managing multi-project support
 
 use crate::models::_entities::projects;
-use crate::services::project_git::{clone_repo, init_repo, validate_repo};
+use crate::services::project_git::{clone_repo, validate_repo};
 use loco_rs::prelude::*;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};

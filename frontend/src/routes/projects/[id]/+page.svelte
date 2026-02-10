@@ -5,7 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 
-	let project = $state.frozen(projectStore.project);
+	let project = $state.raw(projectStore.project);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 

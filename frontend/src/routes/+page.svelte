@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import KanbanBoard from '$lib/components/kanban/KanbanBoard.svelte';
 	import SetupWizard from '$lib/components/setup/SetupWizard.svelte';
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
+	import { goto } from '$app/navigation';
 	import { getSetupStatus, type SetupStatus } from '$lib/api/setup';
 
 	let setupStatus = $state<SetupStatus | null>(null);
@@ -80,14 +80,8 @@
 	<!-- Setup Wizard -->
 	<SetupWizard status={setupStatus} onComplete={handleSetupComplete} />
 {:else}
-	<!-- Main Dashboard with Sidebar -->
-	<div class="flex h-screen bg-gray-50">
-		<Sidebar bind:collapsed={sidebarCollapsed} />
-
-		<main class="flex-1 overflow-auto">
-			<div class="p-8">
-				<KanbanBoard />
-			</div>
-		</main>
-	</div>
+	<!-- Redirect to projects page -->
+	<script>
+		goto('/projects');
+	</script>
 {/if}
