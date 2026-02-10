@@ -551,14 +551,17 @@ async fn init_git(
 pub fn routes() -> Routes {
     Routes::new()
         .prefix("/api/projects")
-        .add("/", get(list_projects))
-        .add("/", post(create_project))
+        // Non-parameterized routes first (more specific)
         .add("/folders", get(list_folders))
         .add("/git/check", post(check_git))
         .add("/git/init", post(init_git))
+        .add("/clone", post(clone_project))
+        // Root routes
+        .add("/", get(list_projects))
+        .add("/", post(create_project))
+        // Parameterized routes last (less specific)
         .add("/{id}", get(get_project))
         .add("/{id}", put(update_project))
         .add("/{id}", delete(delete_project))
         .add("/{id}/archive", post(archive_project))
-        .add("/clone", post(clone_project))
 }

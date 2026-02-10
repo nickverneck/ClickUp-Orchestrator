@@ -80,7 +80,12 @@ export interface CloneProjectRequest {
   parallel_limit?: number;
 }
 
-const API_BASE = '/api/projects';
+// Get backend URL from environment or use default
+const BACKEND_URL = typeof window !== 'undefined'
+  ? (window as any).__BACKEND_URL__ || 'http://localhost:5150'
+  : 'http://localhost:5150';
+
+const API_BASE = `${BACKEND_URL}/api/projects`;
 
 /**
  * List all projects
