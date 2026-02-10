@@ -219,3 +219,39 @@ export async function cloneProjectFromGithub(data: CloneProjectRequest): Promise
 
   return response.json();
 }
+
+export interface FolderInfo {
+  name: string;
+  path: string;
+  is_git_repo: boolean;
+}
+
+export interface FolderListResponse {
+  current_path: string;
+  base_path: string;
+  folders: FolderInfo[];
+  can_go_up: boolean;
+}
+
+/**
+ * List available folders for project creation
+ */
+export async function listFolders(path?: string): Promise<FolderListResponse> {
+  const url = new URL(`${API_BASE}/folders`, window.location.origin);
+  if (path) {
+    url.searchParams.set('path', path);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to list folders: ${response.statusText}`);
+  }
+
+  return response.json();
+}

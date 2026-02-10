@@ -6,6 +6,7 @@ use loco_rs::prelude::*;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use std::path::Path as FsPath;
+use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProjectResponse {
@@ -38,6 +39,21 @@ pub struct ProjectListItem {
     pub dev_branch: String,
     pub workflow_count: i64,
     pub active_task_count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FolderInfo {
+    pub name: String,
+    pub path: String,
+    pub is_git_repo: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FolderListResponse {
+    pub current_path: String,
+    pub base_path: String,
+    pub folders: Vec<FolderInfo>,
+    pub can_go_up: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -368,11 +384,87 @@ async fn clone_project(
     format::json(ProjectResponse::from(inserted))
 }
 
+/// List available folders for project creation
+#[debug_handler]
+async fn list_folders(
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Response> {
+    // Get base path from env or use home directory
+    let base_path_str = std::env::var("PROJECTS_BASE_PATH")
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "/home".to_string())
+        });
+
+    let base_path = PathBuf::from(&base_path_str);
+
+    // Get requested path from query params
+    let requested_path = params.get("path")
+        .map(|p| p.as_str())
+        .unwrap_or("");
+
+    let mut current_path = if requested_path.is_empty() {
+        base_path.clone()
+    } else {
+        let req_path = PathBuf::from(requested_path);
+        // Security: ensure the path is within base_path
+        if !req_path.starts_with(&base_path) {
+            return Err(Error::BadRequest("Path is outside allowed base directory".to_string()));
+        }
+        req_path
+    };
+
+    // Verify the current path exists and is a directory
+    if !current_path.exists() || !current_path.is_dir() {
+        current_path = base_path.clone();
+    }
+
+    let mut folders = Vec::new();
+
+    // List directories in current path
+    if let Ok(entries) = std::fs::read_dir(&current_path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                // Skip hidden directories
+                if let Some(name) = path.file_name() {
+                    let name_str = name.to_string_lossy().to_string();
+                    if !name_str.starts_with('.') {
+                        let is_git_repo = path.join(".git").exists();
+                        folders.push(FolderInfo {
+                            name: name_str,
+                            path: path.to_string_lossy().to_string(),
+                            is_git_repo,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort alphabetically
+    folders.sort_by(|a, b| a.name.cmp(&b.name));
+
+    // Check if we can go up
+    let can_go_up = current_path.parent().map_or(false, |parent| {
+        parent.starts_with(&base_path)
+    });
+
+    format::json(FolderListResponse {
+        current_path: current_path.to_string_lossy().to_string(),
+        base_path: base_path.to_string_lossy().to_string(),
+        folders,
+        can_go_up,
+    })
+}
+
 pub fn routes() -> Routes {
     Routes::new()
         .prefix("/api/projects")
         .add("/", get(list_projects))
         .add("/", post(create_project))
+        .add("/folders", get(list_folders))
         .add("/{id}", get(get_project))
         .add("/{id}", put(update_project))
         .add("/{id}", delete(delete_project))

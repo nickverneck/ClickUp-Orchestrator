@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { createProject, cloneProjectFromGithub, type CreateProjectRequest } from '$lib/api/projects';
+	import FolderPicker from '$lib/components/projects/FolderPicker.svelte';
 	import { goto } from '$app/navigation';
 
 	type CreationType = 'new' | 'clone' | null;
@@ -220,13 +221,10 @@
 				{#if creationType === 'new'}
 					<div>
 						<label class="block text-sm font-semibold text-gray-900">Repository Path *</label>
-						<input
-							type="text"
-							bind:value={repoPath}
-							placeholder="/path/to/repo"
-							class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-						/>
-						<p class="mt-1 text-xs text-gray-500">Full path to existing git repository</p>
+						<p class="mt-1 text-xs text-gray-500">Select an existing git repository</p>
+						<div class="mt-3">
+							<FolderPicker onSelect={(path) => (repoPath = path)} selectedPath={repoPath} />
+						</div>
 					</div>
 				{:else if creationType === 'clone'}
 					<div>
@@ -241,13 +239,10 @@
 
 					<div>
 						<label class="block text-sm font-semibold text-gray-900">Clone Target Path *</label>
-						<input
-							type="text"
-							bind:value={targetPath}
-							placeholder="/path/to/clone"
-							class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-						/>
-						<p class="mt-1 text-xs text-gray-500">Where to clone the repository</p>
+						<p class="mt-1 text-xs text-gray-500">Select where to clone the repository</p>
+						<div class="mt-3">
+							<FolderPicker onSelect={(path) => (targetPath = path)} selectedPath={targetPath} />
+						</div>
 					</div>
 				{/if}
 
