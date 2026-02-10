@@ -90,33 +90,26 @@
 				</div>
 			</div>
 		{:else if folderData && folderData.folders.length > 0}
-			<ul class="divide-y divide-gray-200">
+			<div class="divide-y divide-gray-200 border border-gray-200 rounded-md overflow-hidden">
 				{#each folderData.folders as folder (folder.path)}
-					<li
-						class="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-indigo-50"
-						onkeydown={(e) => {
-							if (e.key === 'Enter') navigateTo(folder.path);
-						}}
-						role="button"
-						tabindex="0"
+					<button
+						onclick={() => navigateTo(folder.path)}
+						class="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left hover:bg-indigo-50 transition-colors"
 					>
 						<svg class="h-5 w-5 flex-shrink-0 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
 							<path d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" />
 						</svg>
-						<button
-							onclick={() => navigateTo(folder.path)}
-							class="flex-1 text-left text-sm font-medium text-gray-900 hover:text-indigo-600"
-						>
+						<span class="flex-1 text-sm font-medium text-gray-900">
 							{folder.name}
-						</button>
+						</span>
 						{#if folder.is_git_repo}
 							<span class="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
 								Git
 							</span>
 						{/if}
-					</li>
+					</button>
 				{/each}
-			</ul>
+			</div>
 		{:else if folderData}
 			<div class="flex items-center justify-center py-8">
 				<p class="text-sm text-gray-500">No folders found</p>

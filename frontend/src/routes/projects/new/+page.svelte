@@ -255,8 +255,9 @@
 			<!-- Step 2: Repository setup -->
 			<div class="space-y-6">
 				<div>
-					<label class="block text-sm font-semibold text-gray-900">Project Name *</label>
+					<label for="project-name" class="block text-sm font-semibold text-gray-900">Project Name *</label>
 					<input
+						id="project-name"
 						type="text"
 						bind:value={name}
 						placeholder="My Project"
@@ -265,8 +266,9 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold text-gray-900">Description</label>
+					<label for="description" class="block text-sm font-semibold text-gray-900">Description</label>
 					<textarea
+						id="description"
 						bind:value={description}
 						placeholder="Optional project description"
 						rows={3}
@@ -276,7 +278,7 @@
 
 				{#if creationType === 'new'}
 					<div>
-						<label class="block text-sm font-semibold text-gray-900">Repository Path *</label>
+						<div class="block text-sm font-semibold text-gray-900">Repository Path *</div>
 						<p class="mt-1 text-xs text-gray-500">Select an existing folder (will initialize git if needed)</p>
 						<div class="mt-3">
 							<FolderPicker onSelect={(path) => handleFolderSelect(path, true)} selectedPath={repoPath} />
@@ -315,8 +317,9 @@
 					{/if}
 				{:else if creationType === 'clone'}
 					<div>
-						<label class="block text-sm font-semibold text-gray-900">GitHub Repository URL *</label>
+						<label for="github-url" class="block text-sm font-semibold text-gray-900">GitHub Repository URL *</label>
 						<input
+							id="github-url"
 							type="text"
 							bind:value={githubUrl}
 							placeholder="https://github.com/user/repo"
@@ -325,7 +328,7 @@
 					</div>
 
 					<div>
-						<label class="block text-sm font-semibold text-gray-900">Clone Target Path *</label>
+						<div class="block text-sm font-semibold text-gray-900">Clone Target Path *</div>
 						<p class="mt-1 text-xs text-gray-500">Select where to clone the repository</p>
 						<div class="mt-3">
 							<FolderPicker onSelect={(path) => handleFolderSelect(path, false)} selectedPath={targetPath} />
@@ -334,8 +337,9 @@
 				{/if}
 
 				<div>
-					<label class="block text-sm font-semibold text-gray-900">Development Branch</label>
+					<label for="dev-branch" class="block text-sm font-semibold text-gray-900">Development Branch</label>
 					<input
+						id="dev-branch"
 						type="text"
 						bind:value={devBranch}
 						placeholder="dev"
@@ -364,11 +368,12 @@
 			<!-- Step 3: Configuration -->
 			<div class="space-y-6">
 				<div>
-					<label class="block text-sm font-semibold text-gray-900">
+					<label for="clickup-api-key" class="block text-sm font-semibold text-gray-900">
 						ClickUp API Key
 						<span class="font-normal text-gray-500">(optional)</span>
 					</label>
 					<input
+						id="clickup-api-key"
 						type="password"
 						bind:value={clickupApiKey}
 						onchange={validateApiKey}
@@ -384,8 +389,9 @@
 
 				{#if clickupApiKey && apiKeyValid}
 					<div>
-						<label class="block text-sm font-semibold text-gray-900">ClickUp List ID</label>
+						<label for="clickup-list-id" class="block text-sm font-semibold text-gray-900">ClickUp List ID</label>
 						<input
+							id="clickup-list-id"
 							type="text"
 							bind:value={clickupListId}
 							placeholder="Optional"
@@ -405,8 +411,9 @@
 				{/if}
 
 				<div>
-					<label class="block text-sm font-semibold text-gray-900">Agent Model</label>
+					<label for="agent-model" class="block text-sm font-semibold text-gray-900">Agent Model</label>
 					<select
+						id="agent-model"
 						bind:value={agentModel}
 						class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
 					>
@@ -416,8 +423,9 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold text-gray-900">Agent Prompt</label>
+					<label for="agent-prompt" class="block text-sm font-semibold text-gray-900">Agent Prompt</label>
 					<textarea
+						id="agent-prompt"
 						bind:value={agentPrompt}
 						placeholder="Optional custom instructions for the agent"
 						rows={3}
@@ -426,8 +434,9 @@
 				</div>
 
 				<div>
-					<label class="block text-sm font-semibold text-gray-900">Parallel Task Limit</label>
+					<label for="parallel-limit" class="block text-sm font-semibold text-gray-900">Parallel Task Limit</label>
 					<input
+						id="parallel-limit"
 						type="number"
 						bind:value={parallelLimit}
 						min="1"
