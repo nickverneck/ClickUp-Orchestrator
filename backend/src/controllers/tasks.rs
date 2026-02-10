@@ -285,6 +285,14 @@ async fn restart(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<R
         .map(|s| s.value)
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| "claude".to_string());
+    let opencode_model = settings::Entity::find()
+        .filter(settings::Column::Key.eq("opencode_model"))
+        .one(&ctx.db)
+        .await
+        .ok()
+        .flatten()
+        .map(|s| s.value)
+        .filter(|v| !v.is_empty());
 
     // Build prompt from task description combined with agent prompt
     let task_description = task
@@ -304,7 +312,7 @@ async fn restart(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<R
 
     // Spawn new process
     match PROCESS_MANAGER
-        .spawn_agent(id, &prompt, &worktree_path, &agent_model)
+        .spawn_agent(id, &prompt, &worktree_path, &agent_model, opencode_model.as_deref())
         .await
     {
         Ok(pid) => {

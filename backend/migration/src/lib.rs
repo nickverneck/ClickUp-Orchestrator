@@ -13,6 +13,7 @@ mod m20260312_000001_workflow_configs;
 mod m20260313_000001_add_workflow_name;
 mod m20260209_000001_add_projects;
 mod m20260210_000001_add_project_api_keys;
+mod m20260210_000002_add_opencode_model;
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -30,6 +31,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260313_000001_add_workflow_name::Migration),
             Box::new(m20260209_000001_add_projects::Migration),
             Box::new(m20260210_000001_add_project_api_keys::Migration),
+            Box::new(m20260210_000002_add_opencode_model::Migration),
             // inject-above (do not remove this comment)
         ]
     }

@@ -25,6 +25,7 @@ pub struct ProjectResponse {
     pub clickup_api_key: Option<String>,
     pub agent_prompt: Option<String>,
     pub agent_model: String,
+    pub opencode_model: Option<String>,
     pub parallel_limit: i32,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -94,6 +95,7 @@ pub struct CreateProjectRequest {
     pub clickup_list_id: Option<String>,
     pub agent_prompt: Option<String>,
     pub agent_model: Option<String>,
+    pub opencode_model: Option<String>,
     pub parallel_limit: Option<i32>,
 }
 
@@ -110,6 +112,7 @@ pub struct UpdateProjectRequest {
     pub clickup_list_id: Option<String>,
     pub agent_prompt: Option<String>,
     pub agent_model: Option<String>,
+    pub opencode_model: Option<String>,
     pub parallel_limit: Option<i32>,
 }
 
@@ -127,6 +130,7 @@ pub struct CloneProjectRequest {
     pub clickup_list_id: Option<String>,
     pub agent_prompt: Option<String>,
     pub agent_model: Option<String>,
+    pub opencode_model: Option<String>,
     pub parallel_limit: Option<i32>,
 }
 
@@ -147,6 +151,7 @@ impl From<projects::Model> for ProjectResponse {
             clickup_api_key: model.clickup_api_key,
             agent_prompt: model.agent_prompt,
             agent_model: model.agent_model,
+            opencode_model: model.opencode_model,
             parallel_limit: model.parallel_limit,
             created_at: model.created_at.into(),
             updated_at: model.updated_at.into(),
@@ -216,6 +221,7 @@ async fn create_project(
         clickup_list_id: Set(params.clickup_list_id),
         agent_prompt: Set(params.agent_prompt),
         agent_model: Set(agent_model),
+        opencode_model: Set(params.opencode_model),
         parallel_limit: Set(parallel_limit),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),
@@ -296,6 +302,10 @@ async fn update_project(
 
     if let Some(model) = params.agent_model {
         active.agent_model = Set(model);
+    }
+
+    if let Some(opencode_model) = params.opencode_model {
+        active.opencode_model = Set(Some(opencode_model));
     }
 
     if let Some(limit) = params.parallel_limit {
@@ -399,6 +409,7 @@ async fn clone_project(
         clickup_list_id: Set(params.clickup_list_id),
         agent_prompt: Set(params.agent_prompt),
         agent_model: Set(agent_model),
+        opencode_model: Set(params.opencode_model),
         parallel_limit: Set(parallel_limit),
         created_at: Set(now.into()),
         updated_at: Set(now.into()),

@@ -18,6 +18,7 @@ export interface Project {
   clickup_list_id?: string;
   agent_prompt?: string;
   agent_model: string;
+  opencode_model?: string;
   parallel_limit: number;
   created_at: string;
   updated_at: string;
@@ -46,6 +47,7 @@ export interface CreateProjectRequest {
   clickup_list_id?: string;
   agent_prompt?: string;
   agent_model?: string;
+  opencode_model?: string;
   parallel_limit?: number;
 }
 
@@ -61,6 +63,7 @@ export interface UpdateProjectRequest {
   clickup_list_id?: string;
   agent_prompt?: string;
   agent_model?: string;
+  opencode_model?: string;
   parallel_limit?: number;
 }
 
@@ -77,6 +80,7 @@ export interface CloneProjectRequest {
   clickup_list_id?: string;
   agent_prompt?: string;
   agent_model?: string;
+  opencode_model?: string;
   parallel_limit?: number;
 }
 

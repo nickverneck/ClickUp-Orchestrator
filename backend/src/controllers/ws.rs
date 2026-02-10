@@ -214,6 +214,7 @@ async fn handle_session_socket(socket: WebSocket, session_id: String) {
                                         &prompt,
                                         &worktree_path,
                                         &agent,
+                                        None,
                                     )
                                     .await
                                 {

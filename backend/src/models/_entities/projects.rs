@@ -29,6 +29,8 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub agent_prompt: Option<String>,
     pub agent_model: String,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub opencode_model: Option<String>,
     pub parallel_limit: i32,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,

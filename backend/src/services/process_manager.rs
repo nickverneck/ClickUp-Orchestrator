@@ -112,6 +112,7 @@ impl ProcessManager {
         agent_type: &str,
         prompt: &str,
         worktree_path: &str,
+        agent_model_id: Option<&str>,
     ) -> Result<tokio::process::Child, String> {
         match agent_type {
             "claude" => {
@@ -189,7 +190,11 @@ impl ProcessManager {
                 )
                 .await?;
 
+                let model = agent_model_id.unwrap_or("opencode/kimi-k2.5-free");
+
                 Command::new("opencode")
+                    .arg("--model")
+                    .arg(model)
                     .arg("run")
                     .arg(prompt)
                     .current_dir(worktree_path)
@@ -215,6 +220,7 @@ impl ProcessManager {
         prompt: &str,
         worktree_path: &str,
         agent_type: &str,
+        agent_model_id: Option<&str>,
     ) -> Result<u32, String> {
         if self.is_running(task_id) {
             return Err(format!("Task {} already has a running process", task_id));
@@ -232,7 +238,7 @@ impl ProcessManager {
             return Err(format!("Agent type not supported for tasks: {}", agent_type));
         }
 
-        let mut child = Self::spawn_agent_child(agent_type, prompt, worktree_path).await?;
+        let mut child = Self::spawn_agent_child(agent_type, prompt, worktree_path, agent_model_id).await?;
 
         let pid = child.id();
 
@@ -424,6 +430,7 @@ impl ProcessManager {
         prompt: &str,
         worktree_path: &str,
         agent_type: &str,
+        agent_model_id: Option<&str>,
     ) -> Result<u32, String> {
         if self.is_session_running(session_id) {
             return Err(format!("Session {} already has a running process", session_id));
@@ -446,7 +453,7 @@ impl ProcessManager {
         tracing::info!("Prompt: {}", prompt);
 
         // Spawn the agent based on type
-        let mut child = Self::spawn_agent_child(agent_type, prompt, worktree_path).await?;
+        let mut child = Self::spawn_agent_child(agent_type, prompt, worktree_path, agent_model_id).await?;
 
         let pid = child.id();
 

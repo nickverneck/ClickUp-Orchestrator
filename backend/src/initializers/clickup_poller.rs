@@ -65,6 +65,7 @@ impl ClickUpPollerInitializer {
         agent_prompt: &Option<String>,
         agent_model: &str,
         project_id: Option<i32>,
+        opencode_model: Option<&str>,
     ) -> Result<i32, ()> {
         tracing::info!(
             "Processing task: {} ({})",
@@ -384,7 +385,7 @@ impl ClickUpPollerInitializer {
         };
 
         match PROCESS_MANAGER
-            .spawn_agent(task_id, &prompt, &worktree_path, agent_model)
+            .spawn_agent(task_id, &prompt, &worktree_path, agent_model, opencode_model)
             .await
         {
             Ok(pid) => {
@@ -513,6 +514,7 @@ impl ClickUpPollerInitializer {
         let dev_branch = project.dev_branch.clone();
         let agent_prompt = project.agent_prompt.clone();
         let agent_model = project.agent_model.clone();
+        let opencode_model = project.opencode_model.clone();
         let project_id = project.id;
 
         Self::poll_and_process_list(
@@ -527,6 +529,7 @@ impl ClickUpPollerInitializer {
             &agent_model,
             Some(project_id),
             &api_key,
+            opencode_model.as_deref(),
         )
         .await;
     }
@@ -579,6 +582,7 @@ impl ClickUpPollerInitializer {
         let agent_model = Self::get_setting(db, "agent_model")
             .await
             .unwrap_or_else(|| "claude".to_string());
+        let opencode_model = Self::get_setting(db, "opencode_model").await;
 
         Self::poll_and_process_list(
             db,
@@ -592,6 +596,7 @@ impl ClickUpPollerInitializer {
             &agent_model,
             None,
             &api_key,
+            opencode_model.as_deref(),
         )
         .await;
     }
@@ -608,6 +613,7 @@ impl ClickUpPollerInitializer {
         agent_model: &str,
         project_id: Option<i32>,
         api_key: &str,
+        opencode_model: Option<&str>,
     ) {
 
         // Check how many tasks are currently in progress (for this project)
@@ -676,6 +682,7 @@ impl ClickUpPollerInitializer {
                     agent_prompt,
                     agent_model,
                     project_id,
+                    opencode_model,
                 )
                 .await
                 .is_ok()
@@ -748,6 +755,7 @@ impl ClickUpPollerInitializer {
                     agent_prompt,
                     agent_model,
                     project_id,
+                    opencode_model,
                 )
                 .await
                 .is_ok()

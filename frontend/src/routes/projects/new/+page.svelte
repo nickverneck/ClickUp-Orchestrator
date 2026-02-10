@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createProject, cloneProjectFromGithub, type CreateProjectRequest, checkGitStatus, initializeGit } from '$lib/api/projects';
 	import { getWorkspaces } from '$lib/api/clickup';
+	import { getOpenCodeModels, type AgentModel } from '$lib/api/agents';
 	import ClickUpBrowser from '$lib/components/settings/ClickUpBrowser.svelte';
 	import FolderPicker from '$lib/components/projects/FolderPicker.svelte';
 	import { goto } from '$app/navigation';
@@ -24,6 +25,9 @@
 	let clickupFolderId = $state('');
 	let clickupListId = $state('');
 	let agentModel = $state('claude');
+	let opencodeModel = $state('opencode/kimi-k2.5-free');
+	let opencodeModels = $state<AgentModel[]>([]);
+	let opencodeModelsLoading = $state(false);
 	let agentPrompt = $state('');
 	let parallelLimit = $state(1);
 	let clickupApiKey = $state('');
@@ -67,6 +71,7 @@
 				clickup_folder_id: clickupFolderId || undefined,
 				clickup_list_id: clickupListId || undefined,
 				agent_model: agentModel,
+				opencode_model: agentModel === 'opencode' ? opencodeModel : undefined,
 				agent_prompt: agentPrompt || undefined,
 				parallel_limit: parallelLimit,
 			};
@@ -110,6 +115,7 @@
 				clickup_folder_id: clickupFolderId || undefined,
 				clickup_list_id: clickupListId || undefined,
 				agent_model: agentModel,
+				opencode_model: agentModel === 'opencode' ? opencodeModel : undefined,
 				agent_prompt: agentPrompt || undefined,
 				parallel_limit: parallelLimit,
 			};
@@ -139,6 +145,24 @@
 			apiKeyError = 'Invalid API key';
 		}
 	}
+
+	async function loadOpenCodeModels() {
+		if (opencodeModels.length > 0) return;
+		opencodeModelsLoading = true;
+		try {
+			opencodeModels = await getOpenCodeModels();
+		} catch (e) {
+			opencodeModels = [];
+		} finally {
+			opencodeModelsLoading = false;
+		}
+	}
+
+	$effect(() => {
+		if (agentModel === 'opencode') {
+			loadOpenCodeModels();
+		}
+	});
 
 	function handleClickUpChange(selection: {
 		workspaceId: string;
@@ -442,6 +466,40 @@
 						<option value="opencode">OpenCode</option>
 					</select>
 				</div>
+
+				{#if agentModel === 'opencode'}
+					<div>
+						<label for="opencode-model" class="block text-sm font-semibold text-gray-900">OpenCode Model</label>
+						{#if opencodeModelsLoading}
+							<div class="mt-2 flex items-center gap-2 text-sm text-gray-500">
+								<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+								</svg>
+								Loading models...
+							</div>
+						{:else if opencodeModels.length > 0}
+							<select
+								id="opencode-model"
+								bind:value={opencodeModel}
+								class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+							>
+								{#each opencodeModels as model}
+									<option value={model.id}>{model.id}</option>
+								{/each}
+							</select>
+						{:else}
+							<input
+								id="opencode-model"
+								type="text"
+								bind:value={opencodeModel}
+								placeholder="opencode/kimi-k2.5-free"
+								class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+							/>
+						{/if}
+						<p class="mt-1 text-xs text-gray-500">Model to use when running OpenCode agent</p>
+					</div>
+				{/if}
 
 				<div>
 					<label for="agent-prompt" class="block text-sm font-semibold text-gray-900">Agent Prompt</label>
