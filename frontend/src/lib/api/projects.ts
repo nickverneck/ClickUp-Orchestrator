@@ -11,6 +11,7 @@ export interface Project {
   repo_path: string;
   github_url?: string;
   dev_branch: string;
+  clickup_api_key?: string;
   clickup_workspace_id?: string;
   clickup_space_id?: string;
   clickup_folder_id?: string;
@@ -38,6 +39,7 @@ export interface CreateProjectRequest {
   description?: string;
   repo_path: string;
   dev_branch?: string;
+  clickup_api_key?: string;
   clickup_workspace_id?: string;
   clickup_space_id?: string;
   clickup_folder_id?: string;
@@ -52,6 +54,7 @@ export interface UpdateProjectRequest {
   description?: string;
   repo_path?: string;
   dev_branch?: string;
+  clickup_api_key?: string;
   clickup_workspace_id?: string;
   clickup_space_id?: string;
   clickup_folder_id?: string;
@@ -67,6 +70,7 @@ export interface CloneProjectRequest {
   github_url: string;
   target_path: string;
   dev_branch?: string;
+  clickup_api_key?: string;
   clickup_workspace_id?: string;
   clickup_space_id?: string;
   clickup_folder_id?: string;

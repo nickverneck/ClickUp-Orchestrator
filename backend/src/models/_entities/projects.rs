@@ -25,6 +25,8 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub clickup_list_id: Option<String>,
     #[sea_orm(column_type = "Text", nullable)]
+    pub clickup_api_key: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
     pub agent_prompt: Option<String>,
     pub agent_model: String,
     pub parallel_limit: i32,

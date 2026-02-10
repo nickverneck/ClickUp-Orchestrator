@@ -16,8 +16,7 @@ use sea_orm::{
 use std::time::Duration;
 use tokio::time::interval;
 
-use crate::models::_entities::{orchestrator_tasks, settings};
-// use crate::models::_entities::projects; // TODO: Uncomment after migration
+use crate::models::_entities::{orchestrator_tasks, projects, settings};
 use crate::services::clickup::{priority_to_int, ClickUpClient};
 use crate::services::process_manager::PROCESS_MANAGER;
 use crate::services::task_logs::{
@@ -460,71 +459,88 @@ impl ClickUpPollerInitializer {
     async fn poll_and_process(ctx: AppContext) {
         let db = &ctx.db;
 
-        // TODO: Uncomment multi-project support after migration
         // First, try new multi-project approach
-        // let projects_result = projects::Entity::find()
-        //     .filter(projects::Column::Status.eq("active"))
-        //     .all(db)
-        //     .await;
-        //
-        // match projects_result {
-        //     Ok(active_projects) if !active_projects.is_empty() => {
-        //         // Process each active project
-        //         for project in active_projects {
-        //             Self::poll_and_process_project(db, &project).await;
-        //         }
-        //     }
-        //     _ => {
-        //         // Fall back to legacy single-project mode
-        //         Self::poll_and_process_legacy(db).await;
-        //     }
-        // }
+        let projects_result = projects::Entity::find()
+            .filter(projects::Column::Status.eq("active"))
+            .all(db)
+            .await;
 
-        // For now, use legacy mode only
-        Self::poll_and_process_legacy(db).await;
+        match projects_result {
+            Ok(active_projects) if !active_projects.is_empty() => {
+                // Process each active project
+                for project in active_projects {
+                    Self::poll_and_process_project(db, &project).await;
+                }
+            }
+            _ => {
+                // Fall back to legacy single-project mode
+                Self::poll_and_process_legacy(db).await;
+            }
+        }
     }
 
-    // TODO: Uncomment after migration
-    // async fn poll_and_process_project(
-    //     db: &sea_orm::DatabaseConnection,
-    //     project: &projects::Model,
-    // ) {
-    //     let list_id = match project.clickup_list_id.as_deref() {
-    //         Some(id) if !id.is_empty() => id.to_string(),
-    //         _ => {
-    //             tracing::debug!(
-    //                 "Project {} has no ClickUp list configured, skipping",
-    //                 project.name
-    //             );
-    //             return;
-    //         }
-    //     };
-    //
-    //     let trigger_status = "Ready for Dev".to_string();  // Could be configurable per project
-    //     let target_status = "In Development".to_string();  // Could be configurable per project
-    //     let parallel_limit = project.parallel_limit as usize;
-    //     let target_repo_path = project.repo_path.clone();
-    //     let dev_branch = project.dev_branch.clone();
-    //     let agent_prompt = project.agent_prompt.clone();
-    //     let agent_model = project.agent_model.clone();
-    //     let project_id = project.id;
-    //
-    //     Self::poll_and_process_list(
-    //         db,
-    //         &list_id,
-    //         &trigger_status,
-    //         &target_status,
-    //         parallel_limit,
-    //         &target_repo_path,
-    //         &dev_branch,
-    //         &agent_prompt,
-    //         &agent_model,
-    //         Some(project_id),
-    //     )
-    //     .await;
-    // }
+    async fn poll_and_process_project(
+        db: &sea_orm::DatabaseConnection,
+        project: &projects::Model,
+    ) {
+        // Check if project has ClickUp API key configured
+        let api_key = match project.clickup_api_key.as_deref() {
+            Some(key) if !key.is_empty() => key.to_string(),
+            _ => {
+                tracing::warn!(
+                    "Project {} has no ClickUp API key configured, skipping",
+                    project.name
+                );
+                return;
+            }
+        };
+
+        let list_id = match project.clickup_list_id.as_deref() {
+            Some(id) if !id.is_empty() => id.to_string(),
+            _ => {
+                tracing::debug!(
+                    "Project {} has no ClickUp list configured, skipping",
+                    project.name
+                );
+                return;
+            }
+        };
+
+        let trigger_status = "Ready for Dev".to_string();  // Could be configurable per project
+        let target_status = "In Development".to_string();  // Could be configurable per project
+        let parallel_limit = project.parallel_limit as usize;
+        let target_repo_path = project.repo_path.clone();
+        let dev_branch = project.dev_branch.clone();
+        let agent_prompt = project.agent_prompt.clone();
+        let agent_model = project.agent_model.clone();
+        let project_id = project.id;
+
+        Self::poll_and_process_list(
+            db,
+            &list_id,
+            &trigger_status,
+            &target_status,
+            parallel_limit,
+            &target_repo_path,
+            &dev_branch,
+            &agent_prompt,
+            &agent_model,
+            Some(project_id),
+            &api_key,
+        )
+        .await;
+    }
 
     async fn poll_and_process_legacy(db: &sea_orm::DatabaseConnection) {
+        // Get global API key from environment (legacy single-project mode)
+        let api_key = match std::env::var("CLICKUP_API_KEY") {
+            Ok(key) if !key.is_empty() => key,
+            _ => {
+                tracing::debug!("No global CLICKUP_API_KEY configured (legacy), skipping poll");
+                return;
+            }
+        };
+
         // Get global settings (legacy single-project mode)
         let Some(list_id) = Self::get_setting(db, "clickup_list_id").await else {
             tracing::debug!("No ClickUp list configured (legacy), skipping poll");
@@ -575,6 +591,7 @@ impl ClickUpPollerInitializer {
             &agent_prompt,
             &agent_model,
             None,
+            &api_key,
         )
         .await;
     }
@@ -590,6 +607,7 @@ impl ClickUpPollerInitializer {
         agent_prompt: &Option<String>,
         agent_model: &str,
         project_id: Option<i32>,
+        api_key: &str,
     ) {
 
         // Check how many tasks are currently in progress (for this project)
@@ -615,13 +633,7 @@ impl ClickUpPollerInitializer {
         }
 
         // Fetch tasks from ClickUp
-        let client = match ClickUpClient::from_env() {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::error!("Failed to create ClickUp client: {}", e);
-                return;
-            }
-        };
+        let client = ClickUpClient::new(api_key.to_string());
 
         if available_slots > 0 {
             let mut queued_query = orchestrator_tasks::Entity::find()

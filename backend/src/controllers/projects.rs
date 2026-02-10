@@ -20,6 +20,7 @@ pub struct ProjectResponse {
     pub clickup_space_id: Option<String>,
     pub clickup_folder_id: Option<String>,
     pub clickup_list_id: Option<String>,
+    pub clickup_api_key: Option<String>,
     pub agent_prompt: Option<String>,
     pub agent_model: String,
     pub parallel_limit: i32,
@@ -45,6 +46,7 @@ pub struct CreateProjectRequest {
     pub description: Option<String>,
     pub repo_path: String,
     pub dev_branch: Option<String>,
+    pub clickup_api_key: Option<String>,
     pub clickup_workspace_id: Option<String>,
     pub clickup_space_id: Option<String>,
     pub clickup_folder_id: Option<String>,
@@ -60,6 +62,7 @@ pub struct UpdateProjectRequest {
     pub description: Option<String>,
     pub repo_path: Option<String>,
     pub dev_branch: Option<String>,
+    pub clickup_api_key: Option<String>,
     pub clickup_workspace_id: Option<String>,
     pub clickup_space_id: Option<String>,
     pub clickup_folder_id: Option<String>,
@@ -76,6 +79,7 @@ pub struct CloneProjectRequest {
     pub github_url: String,
     pub target_path: String,
     pub dev_branch: Option<String>,
+    pub clickup_api_key: Option<String>,
     pub clickup_workspace_id: Option<String>,
     pub clickup_space_id: Option<String>,
     pub clickup_folder_id: Option<String>,
@@ -99,6 +103,7 @@ impl From<projects::Model> for ProjectResponse {
             clickup_space_id: model.clickup_space_id,
             clickup_folder_id: model.clickup_folder_id,
             clickup_list_id: model.clickup_list_id,
+            clickup_api_key: model.clickup_api_key,
             agent_prompt: model.agent_prompt,
             agent_model: model.agent_model,
             parallel_limit: model.parallel_limit,
@@ -163,6 +168,7 @@ async fn create_project(
         repo_path: Set(repo_path.to_string()),
         github_url: Set(None),
         dev_branch: Set(dev_branch),
+        clickup_api_key: Set(params.clickup_api_key),
         clickup_workspace_id: Set(params.clickup_workspace_id),
         clickup_space_id: Set(params.clickup_space_id),
         clickup_folder_id: Set(params.clickup_folder_id),
@@ -221,6 +227,10 @@ async fn update_project(
 
     if let Some(dev_branch) = params.dev_branch {
         active.dev_branch = Set(dev_branch);
+    }
+
+    if let Some(api_key) = params.clickup_api_key {
+        active.clickup_api_key = Set(Some(api_key));
     }
 
     if let Some(workspace_id) = params.clickup_workspace_id {
@@ -341,6 +351,7 @@ async fn clone_project(
         repo_path: Set(target_path.to_string()),
         github_url: Set(Some(github_url.to_string())),
         dev_branch: Set(dev_branch),
+        clickup_api_key: Set(params.clickup_api_key),
         clickup_workspace_id: Set(params.clickup_workspace_id),
         clickup_space_id: Set(params.clickup_space_id),
         clickup_folder_id: Set(params.clickup_folder_id),

@@ -1,25 +1,36 @@
 //! ClickUp hierarchy browser controller
 
 use crate::services::clickup::ClickUpClient;
+use axum::extract::Query;
 use loco_rs::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
     pub error: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ApiKeyQuery {
+    pub api_key: Option<String>,
+}
+
 /// Get all workspaces (teams) the user has access to
 #[debug_handler]
-async fn get_workspaces() -> Result<Response> {
-    let client = match ClickUpClient::from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            return format::json(ErrorResponse {
-                error: e.to_string(),
-            });
-        }
+async fn get_workspaces(Query(params): Query<ApiKeyQuery>) -> Result<Response> {
+    let api_key = match params.api_key {
+        Some(key) if !key.is_empty() => key,
+        _ => match std::env::var("CLICKUP_API_KEY") {
+            Ok(key) if !key.is_empty() => key,
+            _ => {
+                return format::json(ErrorResponse {
+                    error: "API key not provided and not configured in environment".to_string(),
+                });
+            }
+        },
     };
+
+    let client = ClickUpClient::new(api_key);
 
     match client.get_workspaces().await {
         Ok(teams) => format::json(teams),
@@ -31,15 +42,23 @@ async fn get_workspaces() -> Result<Response> {
 
 /// Get all spaces in a workspace
 #[debug_handler]
-async fn get_spaces(Path(team_id): Path<String>) -> Result<Response> {
-    let client = match ClickUpClient::from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            return format::json(ErrorResponse {
-                error: e.to_string(),
-            });
-        }
+async fn get_spaces(
+    Path(team_id): Path<String>,
+    Query(params): Query<ApiKeyQuery>,
+) -> Result<Response> {
+    let api_key = match params.api_key {
+        Some(key) if !key.is_empty() => key,
+        _ => match std::env::var("CLICKUP_API_KEY") {
+            Ok(key) if !key.is_empty() => key,
+            _ => {
+                return format::json(ErrorResponse {
+                    error: "API key not provided and not configured in environment".to_string(),
+                });
+            }
+        },
     };
+
+    let client = ClickUpClient::new(api_key);
 
     match client.get_spaces(&team_id).await {
         Ok(spaces) => format::json(spaces),
@@ -51,15 +70,23 @@ async fn get_spaces(Path(team_id): Path<String>) -> Result<Response> {
 
 /// Get all folders in a space
 #[debug_handler]
-async fn get_folders(Path(space_id): Path<String>) -> Result<Response> {
-    let client = match ClickUpClient::from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            return format::json(ErrorResponse {
-                error: e.to_string(),
-            });
-        }
+async fn get_folders(
+    Path(space_id): Path<String>,
+    Query(params): Query<ApiKeyQuery>,
+) -> Result<Response> {
+    let api_key = match params.api_key {
+        Some(key) if !key.is_empty() => key,
+        _ => match std::env::var("CLICKUP_API_KEY") {
+            Ok(key) if !key.is_empty() => key,
+            _ => {
+                return format::json(ErrorResponse {
+                    error: "API key not provided and not configured in environment".to_string(),
+                });
+            }
+        },
     };
+
+    let client = ClickUpClient::new(api_key);
 
     match client.get_folders(&space_id).await {
         Ok(folders) => format::json(folders),
@@ -71,15 +98,23 @@ async fn get_folders(Path(space_id): Path<String>) -> Result<Response> {
 
 /// Get all lists in a folder
 #[debug_handler]
-async fn get_lists_in_folder(Path(folder_id): Path<String>) -> Result<Response> {
-    let client = match ClickUpClient::from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            return format::json(ErrorResponse {
-                error: e.to_string(),
-            });
-        }
+async fn get_lists_in_folder(
+    Path(folder_id): Path<String>,
+    Query(params): Query<ApiKeyQuery>,
+) -> Result<Response> {
+    let api_key = match params.api_key {
+        Some(key) if !key.is_empty() => key,
+        _ => match std::env::var("CLICKUP_API_KEY") {
+            Ok(key) if !key.is_empty() => key,
+            _ => {
+                return format::json(ErrorResponse {
+                    error: "API key not provided and not configured in environment".to_string(),
+                });
+            }
+        },
     };
+
+    let client = ClickUpClient::new(api_key);
 
     match client.get_lists_in_folder(&folder_id).await {
         Ok(lists) => format::json(lists),
@@ -91,15 +126,23 @@ async fn get_lists_in_folder(Path(folder_id): Path<String>) -> Result<Response> 
 
 /// Get folderless lists in a space
 #[debug_handler]
-async fn get_folderless_lists(Path(space_id): Path<String>) -> Result<Response> {
-    let client = match ClickUpClient::from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            return format::json(ErrorResponse {
-                error: e.to_string(),
-            });
-        }
+async fn get_folderless_lists(
+    Path(space_id): Path<String>,
+    Query(params): Query<ApiKeyQuery>,
+) -> Result<Response> {
+    let api_key = match params.api_key {
+        Some(key) if !key.is_empty() => key,
+        _ => match std::env::var("CLICKUP_API_KEY") {
+            Ok(key) if !key.is_empty() => key,
+            _ => {
+                return format::json(ErrorResponse {
+                    error: "API key not provided and not configured in environment".to_string(),
+                });
+            }
+        },
     };
+
+    let client = ClickUpClient::new(api_key);
 
     match client.get_folderless_lists(&space_id).await {
         Ok(lists) => format::json(lists),
@@ -111,15 +154,23 @@ async fn get_folderless_lists(Path(space_id): Path<String>) -> Result<Response> 
 
 /// Get statuses for a list
 #[debug_handler]
-async fn get_list_statuses(Path(list_id): Path<String>) -> Result<Response> {
-    let client = match ClickUpClient::from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            return format::json(ErrorResponse {
-                error: e.to_string(),
-            });
-        }
+async fn get_list_statuses(
+    Path(list_id): Path<String>,
+    Query(params): Query<ApiKeyQuery>,
+) -> Result<Response> {
+    let api_key = match params.api_key {
+        Some(key) if !key.is_empty() => key,
+        _ => match std::env::var("CLICKUP_API_KEY") {
+            Ok(key) if !key.is_empty() => key,
+            _ => {
+                return format::json(ErrorResponse {
+                    error: "API key not provided and not configured in environment".to_string(),
+                });
+            }
+        },
     };
+
+    let client = ClickUpClient::new(api_key);
 
     match client.get_list_statuses(&list_id).await {
         Ok(statuses) => format::json(statuses),
