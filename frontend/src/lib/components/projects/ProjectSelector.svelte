@@ -59,6 +59,7 @@
 								? 'bg-indigo-100 font-medium'
 								: ''}"
 							role="option"
+							aria-selected={projectStore.currentProjectId === project.id}
 						>
 							<div class="flex items-center justify-between">
 								<span>{project.name}</span>

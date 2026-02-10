@@ -10,7 +10,7 @@
 
 	let { collapsed = $bindable(false) }: Props = $props();
 	const projectStore = useCurrentProject();
-	let projects = $state([]);
+	let projects = $state<any[]>([]);
 	let loadingProjects = $state(true);
 
 	// Load projects on mount

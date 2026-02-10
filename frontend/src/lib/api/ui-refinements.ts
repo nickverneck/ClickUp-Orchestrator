@@ -1,7 +1,9 @@
 import { get, post, del } from './client';
 import type { AgentType, ElementMetadata } from '$lib/types/ui-refinements';
 
-const API_BASE = 'http://localhost:5150';
+// Use the current hostname to support LAN access
+const API_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const API_BASE = `http://${API_HOST}:5150`;
 
 export interface Session {
 	session_id: string;

@@ -24,6 +24,11 @@
 	let parallelLimit = $state(1);
 
 	onMount(async () => {
+		if (!$page.params.id) {
+			error = 'Invalid project ID';
+			loading = false;
+			return;
+		}
 		projectId = parseInt($page.params.id, 10);
 		if (isNaN(projectId)) {
 			error = 'Invalid project ID';
@@ -162,8 +167,9 @@
 					<h2 class="text-lg font-semibold text-gray-900">General</h2>
 					<div class="mt-6 space-y-6">
 						<div>
-							<label class="block text-sm font-semibold text-gray-900">Project Name</label>
+							<label for="project-name" class="block text-sm font-semibold text-gray-900">Project Name</label>
 							<input
+								id="project-name"
 								type="text"
 								bind:value={name}
 								class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -171,8 +177,9 @@
 						</div>
 
 						<div>
-							<label class="block text-sm font-semibold text-gray-900">Description</label>
+							<label for="description" class="block text-sm font-semibold text-gray-900">Description</label>
 							<textarea
+								id="description"
 								bind:value={description}
 								rows={3}
 								class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -186,8 +193,9 @@
 					<h2 class="text-lg font-semibold text-gray-900">Git Configuration</h2>
 					<div class="mt-6 space-y-6">
 						<div>
-							<label class="block text-sm font-semibold text-gray-900">Repository Path</label>
+							<label for="repo-path" class="block text-sm font-semibold text-gray-900">Repository Path</label>
 							<input
+								id="repo-path"
 								type="text"
 								bind:value={repoPath}
 								class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -195,8 +203,9 @@
 						</div>
 
 						<div>
-							<label class="block text-sm font-semibold text-gray-900">Development Branch</label>
+							<label for="dev-branch" class="block text-sm font-semibold text-gray-900">Development Branch</label>
 							<input
+								id="dev-branch"
 								type="text"
 								bind:value={devBranch}
 								class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -210,8 +219,9 @@
 					<h2 class="text-lg font-semibold text-gray-900">ClickUp Configuration</h2>
 				<div class="mt-6 space-y-6">
 					<div>
-						<label class="block text-sm font-semibold text-gray-900">API Key</label>
+						<label for="api-key" class="block text-sm font-semibold text-gray-900">API Key</label>
 						<input
+							id="api-key"
 							type="password"
 							bind:value={clickupApiKey}
 							placeholder="pk_..."
@@ -220,8 +230,9 @@
 						<p class="mt-1 text-xs text-gray-500">Your ClickUp API key for this project</p>
 					</div>
 					<div>
-						<label class="block text-sm font-semibold text-gray-900">List ID</label>
+						<label for="list-id" class="block text-sm font-semibold text-gray-900">List ID</label>
 						<input
+							id="list-id"
 							type="text"
 							bind:value={clickupListId}
 							placeholder="Optional"
@@ -236,8 +247,9 @@
 					<h2 class="text-lg font-semibold text-gray-900">Agent Configuration</h2>
 					<div class="mt-6 space-y-6">
 						<div>
-							<label class="block text-sm font-semibold text-gray-900">Model</label>
+							<label for="agent-model" class="block text-sm font-semibold text-gray-900">Model</label>
 							<select
+								id="agent-model"
 								bind:value={agentModel}
 								class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
 							>
@@ -247,8 +259,9 @@
 						</div>
 
 						<div>
-							<label class="block text-sm font-semibold text-gray-900">Custom Prompt</label>
+							<label for="agent-prompt" class="block text-sm font-semibold text-gray-900">Custom Prompt</label>
 							<textarea
+								id="agent-prompt"
 								bind:value={agentPrompt}
 								placeholder="Optional instructions for the agent"
 								rows={4}
@@ -257,8 +270,9 @@
 						</div>
 
 						<div>
-							<label class="block text-sm font-semibold text-gray-900">Parallel Task Limit</label>
+							<label for="parallel-limit" class="block text-sm font-semibold text-gray-900">Parallel Task Limit</label>
 							<input
+								id="parallel-limit"
 								type="number"
 								bind:value={parallelLimit}
 								min="1"

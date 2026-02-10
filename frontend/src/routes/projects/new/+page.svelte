@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { createProject, cloneProjectFromGithub, type CreateProjectRequest, checkGitStatus, initializeGit } from '$lib/api/projects';
+	import { getWorkspaces } from '$lib/api/clickup';
 	import FolderPicker from '$lib/components/projects/FolderPicker.svelte';
 	import { goto } from '$app/navigation';
 
@@ -120,17 +121,12 @@
 		}
 
 		try {
-			const response = await fetch(`/api/clickup/workspaces?api_key=${encodeURIComponent(clickupApiKey)}`);
-			if (response.ok) {
-				apiKeyValid = true;
-				apiKeyError = null;
-			} else {
-				apiKeyValid = false;
-				apiKeyError = 'Invalid API key';
-			}
+			await getWorkspaces(clickupApiKey);
+			apiKeyValid = true;
+			apiKeyError = null;
 		} catch (e) {
 			apiKeyValid = false;
-			apiKeyError = 'Failed to validate API key';
+			apiKeyError = 'Invalid API key';
 		}
 	}
 

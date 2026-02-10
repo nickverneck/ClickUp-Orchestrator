@@ -10,6 +10,11 @@
 	let error = $state<string | null>(null);
 
 	onMount(async () => {
+		if (!$page.params.id) {
+			error = 'Invalid project ID';
+			loading = false;
+			return;
+		}
 		const projectId = parseInt($page.params.id, 10);
 		if (isNaN(projectId)) {
 			error = 'Invalid project ID';

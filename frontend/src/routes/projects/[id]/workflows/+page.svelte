@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { get } from '$lib/api/client';
 
 	let projectId: number;
 	let workflows = $state<any[]>([]);
@@ -9,6 +10,11 @@
 	let error = $state<string | null>(null);
 
 	onMount(async () => {
+		if (!$page.params.id) {
+			error = 'Invalid project ID';
+			loading = false;
+			return;
+		}
 		projectId = parseInt($page.params.id, 10);
 		if (isNaN(projectId)) {
 			error = 'Invalid project ID';
@@ -17,11 +23,7 @@
 		}
 
 		try {
-			const response = await fetch(`/api/projects/${projectId}/workflows`);
-			if (!response.ok) {
-				throw new Error('Failed to load workflows');
-			}
-			workflows = await response.json();
+			workflows = await get<any[]>(`/projects/${projectId}/workflows`);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load workflows';
 		} finally {

@@ -81,8 +81,10 @@ export interface CloneProjectRequest {
 }
 
 // Get backend URL from environment or use default
+// Use the current hostname to support LAN access
+const API_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 const BACKEND_URL = typeof window !== 'undefined'
-  ? (window as any).__BACKEND_URL__ || 'http://localhost:5150'
+  ? (window as any).__BACKEND_URL__ || `http://${API_HOST}:5150`
   : 'http://localhost:5150';
 
 const API_BASE = `${BACKEND_URL}/api/projects`;
