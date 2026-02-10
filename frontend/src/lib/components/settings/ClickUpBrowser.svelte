@@ -12,6 +12,7 @@
 	} from '$lib/api/clickup';
 
 	interface Props {
+		apiKey?: string;
 		workspaceId: string;
 		spaceId: string;
 		folderId: string;
@@ -27,6 +28,7 @@
 	}
 
 	let {
+		apiKey,
 		workspaceId,
 		spaceId,
 		folderId,
@@ -86,7 +88,7 @@
 		loading = true;
 		error = null;
 		try {
-			workspaces = await getWorkspaces();
+			workspaces = await getWorkspaces(apiKey);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load workspaces';
 		} finally {
@@ -98,7 +100,7 @@
 		loading = true;
 		error = null;
 		try {
-			spaces = await getSpaces(teamId);
+			spaces = await getSpaces(teamId, apiKey);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load spaces';
 		} finally {
@@ -111,8 +113,8 @@
 		error = null;
 		try {
 			[folders, folderlessLists] = await Promise.all([
-				getFolders(spaceIdValue),
-				getFolderlessLists(spaceIdValue)
+				getFolders(spaceIdValue, apiKey),
+				getFolderlessLists(spaceIdValue, apiKey)
 			]);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load folders';
@@ -125,7 +127,7 @@
 		loading = true;
 		error = null;
 		try {
-			lists = await getListsInFolder(folderIdValue);
+			lists = await getListsInFolder(folderIdValue, apiKey);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load lists';
 		} finally {

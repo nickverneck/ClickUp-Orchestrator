@@ -20,6 +20,9 @@
 	let agentModel = $state('claude');
 	let agentPrompt = $state('');
 	let parallelLimit = $state(1);
+	let clickupApiKey = $state('');
+	let apiKeyError = $state<string | null>(null);
+	let apiKeyValid = $state(false);
 
 	function selectType(type: CreationType) {
 		creationType = type;
@@ -49,6 +52,7 @@
 				description: description.trim() || undefined,
 				repo_path: repoPath.trim(),
 				dev_branch: devBranch.trim() || 'dev',
+				clickup_api_key: clickupApiKey || undefined,
 				agent_model: agentModel,
 				agent_prompt: agentPrompt || undefined,
 				clickup_list_id: clickupListId || undefined,
@@ -88,6 +92,7 @@
 				github_url: githubUrl.trim(),
 				target_path: targetPath.trim(),
 				dev_branch: devBranch.trim() || 'dev',
+				clickup_api_key: clickupApiKey || undefined,
 				agent_model: agentModel,
 				agent_prompt: agentPrompt || undefined,
 				clickup_list_id: clickupListId || undefined,
@@ -100,6 +105,28 @@
 			error = err instanceof Error ? err.message : 'Failed to clone project';
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function validateApiKey() {
+		if (!clickupApiKey.trim()) {
+			apiKeyValid = false;
+			apiKeyError = null;
+			return;
+		}
+
+		try {
+			const response = await fetch(`/api/clickup/workspaces?api_key=${encodeURIComponent(clickupApiKey)}`);
+			if (response.ok) {
+				apiKeyValid = true;
+				apiKeyError = null;
+			} else {
+				apiKeyValid = false;
+				apiKeyError = 'Invalid API key';
+			}
+		} catch (e) {
+			apiKeyValid = false;
+			apiKeyError = 'Failed to validate API key';
 		}
 	}
 </script>
@@ -255,14 +282,45 @@
 			<!-- Step 3: Configuration -->
 			<div class="space-y-6">
 				<div>
-					<label class="block text-sm font-semibold text-gray-900">ClickUp List ID</label>
+					<label class="block text-sm font-semibold text-gray-900">
+						ClickUp API Key
+						<span class="font-normal text-gray-500">(optional)</span>
+					</label>
 					<input
-						type="text"
-						bind:value={clickupListId}
-						placeholder="Optional"
+						type="password"
+						bind:value={clickupApiKey}
+						onchange={validateApiKey}
+						placeholder="pk_..."
 						class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
 					/>
+					{#if apiKeyError}
+						<p class="mt-1 text-sm text-red-600">{apiKeyError}</p>
+					{:else if clickupApiKey && apiKeyValid}
+						<p class="mt-1 text-sm text-green-600">✓ API key is valid</p>
+					{/if}
 				</div>
+
+				{#if clickupApiKey && apiKeyValid}
+					<div>
+						<label class="block text-sm font-semibold text-gray-900">ClickUp List ID</label>
+						<input
+							type="text"
+							bind:value={clickupListId}
+							placeholder="Optional"
+							class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+						/>
+					</div>
+				{:else}
+					<div class="rounded-md bg-blue-50 p-4">
+						<p class="text-sm text-blue-700">
+							{#if !clickupApiKey}
+								Add a ClickUp API key above to configure your ClickUp workspace
+							{:else}
+								Validating API key...
+							{/if}
+						</p>
+					</div>
+				{/if}
 
 				<div>
 					<label class="block text-sm font-semibold text-gray-900">Agent Model</label>

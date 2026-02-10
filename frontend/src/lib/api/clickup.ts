@@ -36,26 +36,31 @@ export interface Status {
 	orderindex?: number;
 }
 
-export async function getWorkspaces(): Promise<Team[]> {
-	return get<Team[]>('/clickup/workspaces');
+function buildUrl(endpoint: string, apiKey?: string): string {
+	if (!apiKey) return endpoint;
+	return `${endpoint}?api_key=${encodeURIComponent(apiKey)}`;
 }
 
-export async function getSpaces(teamId: string): Promise<Space[]> {
-	return get<Space[]>(`/clickup/workspaces/${teamId}/spaces`);
+export async function getWorkspaces(apiKey?: string): Promise<Team[]> {
+	return get<Team[]>(buildUrl('/clickup/workspaces', apiKey));
 }
 
-export async function getFolders(spaceId: string): Promise<Folder[]> {
-	return get<Folder[]>(`/clickup/spaces/${spaceId}/folders`);
+export async function getSpaces(teamId: string, apiKey?: string): Promise<Space[]> {
+	return get<Space[]>(buildUrl(`/clickup/workspaces/${teamId}/spaces`, apiKey));
 }
 
-export async function getListsInFolder(folderId: string): Promise<List[]> {
-	return get<List[]>(`/clickup/folders/${folderId}/lists`);
+export async function getFolders(spaceId: string, apiKey?: string): Promise<Folder[]> {
+	return get<Folder[]>(buildUrl(`/clickup/spaces/${spaceId}/folders`, apiKey));
 }
 
-export async function getFolderlessLists(spaceId: string): Promise<List[]> {
-	return get<List[]>(`/clickup/spaces/${spaceId}/lists`);
+export async function getListsInFolder(folderId: string, apiKey?: string): Promise<List[]> {
+	return get<List[]>(buildUrl(`/clickup/folders/${folderId}/lists`, apiKey));
 }
 
-export async function getListStatuses(listId: string): Promise<Status[]> {
-	return get<Status[]>(`/clickup/lists/${listId}/statuses`);
+export async function getFolderlessLists(spaceId: string, apiKey?: string): Promise<List[]> {
+	return get<List[]>(buildUrl(`/clickup/spaces/${spaceId}/lists`, apiKey));
+}
+
+export async function getListStatuses(listId: string, apiKey?: string): Promise<Status[]> {
+	return get<Status[]>(buildUrl(`/clickup/lists/${listId}/statuses`, apiKey));
 }

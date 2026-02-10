@@ -1,27 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import SetupWizard from '$lib/components/setup/SetupWizard.svelte';
-	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import { goto } from '$app/navigation';
 	import { getSetupStatus, type SetupStatus } from '$lib/api/setup';
 
 	let setupStatus = $state<SetupStatus | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let sidebarCollapsed = $state(false);
 
 	onMount(() => {
 		checkSetup();
-		// Load sidebar state from localStorage
-		const saved = localStorage.getItem('sidebarCollapsed');
-		if (saved !== null) {
-			sidebarCollapsed = saved === 'true';
-		}
-	});
-
-	// Save sidebar state when it changes
-	$effect(() => {
-		localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed));
 	});
 
 	async function checkSetup() {
@@ -29,6 +17,11 @@
 		error = null;
 		try {
 			setupStatus = await getSetupStatus();
+
+			// If setup is complete, redirect to projects page
+			if (setupStatus && setupStatus.is_complete && setupStatus.has_project) {
+				goto('/projects');
+			}
 		} catch (e) {
 			// If we can't reach the backend, show a connection error
 			error = e instanceof Error ? e.message : 'Failed to connect to backend';
@@ -38,7 +31,7 @@
 	}
 
 	function handleSetupComplete() {
-		// Reload setup status
+		// Reload setup status and redirect
 		checkSetup();
 	}
 </script>
@@ -77,11 +70,6 @@
 		</div>
 	</div>
 {:else if setupStatus && !setupStatus.is_complete}
-	<!-- Setup Wizard -->
+	<!-- Setup Wizard - Welcome screen and redirect to project creation -->
 	<SetupWizard status={setupStatus} onComplete={handleSetupComplete} />
-{:else}
-	<!-- Redirect to projects page -->
-	<script>
-		goto('/projects');
-	</script>
 {/if}

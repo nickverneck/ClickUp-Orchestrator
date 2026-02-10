@@ -17,6 +17,7 @@
 	let description = $state('');
 	let repoPath = $state('');
 	let devBranch = $state('dev');
+	let clickupApiKey = $state('');
 	let clickupListId = $state('');
 	let agentModel = $state('claude');
 	let agentPrompt = $state('');
@@ -36,6 +37,7 @@
 			description = project.description || '';
 			repoPath = project.repo_path;
 			devBranch = project.dev_branch;
+			clickupApiKey = project.clickup_api_key || '';
 			clickupListId = project.clickup_list_id || '';
 			agentModel = project.agent_model;
 			agentPrompt = project.agent_prompt || '';
@@ -58,6 +60,7 @@
 				description: description || undefined,
 				repo_path: repoPath,
 				dev_branch: devBranch,
+				clickup_api_key: clickupApiKey || undefined,
 				clickup_list_id: clickupListId || undefined,
 				agent_model: agentModel,
 				agent_prompt: agentPrompt || undefined,
@@ -205,7 +208,18 @@
 				<!-- ClickUp Configuration -->
 				<div class="rounded-lg bg-white p-6 shadow-sm">
 					<h2 class="text-lg font-semibold text-gray-900">ClickUp Configuration</h2>
-					<div class="mt-6">
+				<div class="mt-6 space-y-6">
+					<div>
+						<label class="block text-sm font-semibold text-gray-900">API Key</label>
+						<input
+							type="password"
+							bind:value={clickupApiKey}
+							placeholder="pk_..."
+							class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+						/>
+						<p class="mt-1 text-xs text-gray-500">Your ClickUp API key for this project</p>
+					</div>
+					<div>
 						<label class="block text-sm font-semibold text-gray-900">List ID</label>
 						<input
 							type="text"
@@ -214,6 +228,7 @@
 							class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
 						/>
 					</div>
+				</div>
 				</div>
 
 				<!-- Agent Configuration -->
