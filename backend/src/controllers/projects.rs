@@ -3,9 +3,9 @@
 use crate::models::_entities::projects;
 use crate::services::project_git::{clone_repo, init_repo, validate_repo};
 use loco_rs::prelude::*;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, DeleteMany};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::Path as FsPath;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProjectResponse {
@@ -147,7 +147,7 @@ async fn create_project(
     }
 
     // Verify the repo path is valid
-    if !Path::new(repo_path).exists() {
+    if !FsPath::new(repo_path).exists() {
         return Err(Error::BadRequest(format!("Repository path does not exist: {}", repo_path)));
     }
 
@@ -213,7 +213,7 @@ async fn update_project(
     }
 
     if let Some(repo_path) = params.repo_path {
-        if !Path::new(&repo_path).exists() {
+        if !FsPath::new(&repo_path).exists() {
             return Err(Error::BadRequest(format!("Repository path does not exist: {}", repo_path)));
         }
         active.repo_path = Set(repo_path);
@@ -321,12 +321,12 @@ async fn clone_project(
     // Clone the repository
     clone_repo(github_url, target_path)
         .await
-        .map_err(|e| Error::InternalServerError(format!("Failed to clone repository: {}", e)))?;
+        .map_err(|e| Error::BadRequest(format!("Failed to clone repository: {}", e)))?;
 
     // Verify it's a valid git repo
     validate_repo(target_path)
         .await
-        .map_err(|e| Error::InternalServerError(format!("Invalid repository: {}", e)))?;
+        .map_err(|e| Error::BadRequest(format!("Invalid repository: {}", e)))?;
 
     // Create project record
     let now = chrono::Utc::now();
