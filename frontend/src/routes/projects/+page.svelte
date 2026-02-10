@@ -91,16 +91,19 @@
 			</div>
 		{:else if projects.length === 0}
 			<!-- Empty state -->
-			<div class="text-center">
-				<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+			<div class="text-center py-12">
+				<svg class="mx-auto h-16 w-16 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4" />
 				</svg>
-				<h3 class="mt-2 text-sm font-semibold text-gray-900">No projects</h3>
-				<p class="mt-1 text-sm text-gray-500">Get started by creating your first project.</p>
+				<h2 class="mt-4 text-2xl font-bold tracking-tight text-gray-900">Let's start your first project</h2>
+				<p class="mt-2 text-base text-gray-600">Create a project to manage your workflows and connect to ClickUp.</p>
 				<button
 					onclick={createNewProject}
-					class="mt-4 inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+					class="mt-6 inline-flex items-center rounded-lg bg-indigo-600 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
 				>
+					<svg class="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+					</svg>
 					Create your first project
 				</button>
 			</div>

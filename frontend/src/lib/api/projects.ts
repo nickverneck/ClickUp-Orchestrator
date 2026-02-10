@@ -93,6 +93,11 @@ export async function listProjects(): Promise<ProjectListItem[]> {
     },
   });
 
+  // Handle 404 as "no projects" rather than an error
+  if (response.status === 404) {
+    return [];
+  }
+
   if (!response.ok) {
     throw new Error(`Failed to list projects: ${response.statusText}`);
   }
