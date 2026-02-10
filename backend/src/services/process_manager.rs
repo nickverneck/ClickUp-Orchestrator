@@ -182,6 +182,28 @@ impl ProcessManager {
                         )
                     })
             }
+            "opencode" => {
+                Self::ensure_command(
+                    "opencode",
+                    "The 'opencode' command is not found in PATH. Please install OpenCode and ensure it's in your PATH.",
+                )
+                .await?;
+
+                Command::new("opencode")
+                    .arg("run")
+                    .arg(prompt)
+                    .current_dir(worktree_path)
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| {
+                        format!(
+                            "Failed to spawn opencode process: {} (working dir: {})",
+                            e, worktree_path
+                        )
+                    })
+            }
             _ => Err(format!("Unknown agent type: {}", agent_type)),
         }
     }
@@ -206,7 +228,7 @@ impl ProcessManager {
             ));
         }
 
-        if !matches!(agent_type, "claude" | "codex") {
+        if !matches!(agent_type, "claude" | "codex" | "gemini" | "opencode") {
             return Err(format!("Agent type not supported for tasks: {}", agent_type));
         }
 

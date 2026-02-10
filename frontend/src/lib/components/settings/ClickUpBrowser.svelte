@@ -47,9 +47,12 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 
-	// Load workspaces on mount
+	// Load workspaces on mount and when apiKey changes
 	$effect(() => {
-		loadWorkspaces();
+		const key = apiKey; // track reactively
+		if (key !== undefined || apiKey === undefined) {
+			loadWorkspaces();
+		}
 	});
 
 	// Load spaces when workspace changes

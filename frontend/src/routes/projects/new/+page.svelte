@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createProject, cloneProjectFromGithub, type CreateProjectRequest, checkGitStatus, initializeGit } from '$lib/api/projects';
 	import { getWorkspaces } from '$lib/api/clickup';
+	import ClickUpBrowser from '$lib/components/settings/ClickUpBrowser.svelte';
 	import FolderPicker from '$lib/components/projects/FolderPicker.svelte';
 	import { goto } from '$app/navigation';
 
@@ -18,6 +19,9 @@
 	let githubUrl = $state('');
 	let targetPath = $state('');
 	let devBranch = $state('dev');
+	let clickupWorkspaceId = $state('');
+	let clickupSpaceId = $state('');
+	let clickupFolderId = $state('');
 	let clickupListId = $state('');
 	let agentModel = $state('claude');
 	let agentPrompt = $state('');
@@ -58,9 +62,12 @@
 				repo_path: repoPath.trim(),
 				dev_branch: devBranch.trim() || 'dev',
 				clickup_api_key: clickupApiKey || undefined,
+				clickup_workspace_id: clickupWorkspaceId || undefined,
+				clickup_space_id: clickupSpaceId || undefined,
+				clickup_folder_id: clickupFolderId || undefined,
+				clickup_list_id: clickupListId || undefined,
 				agent_model: agentModel,
 				agent_prompt: agentPrompt || undefined,
-				clickup_list_id: clickupListId || undefined,
 				parallel_limit: parallelLimit,
 			};
 
@@ -98,9 +105,12 @@
 				target_path: targetPath.trim(),
 				dev_branch: devBranch.trim() || 'dev',
 				clickup_api_key: clickupApiKey || undefined,
+				clickup_workspace_id: clickupWorkspaceId || undefined,
+				clickup_space_id: clickupSpaceId || undefined,
+				clickup_folder_id: clickupFolderId || undefined,
+				clickup_list_id: clickupListId || undefined,
 				agent_model: agentModel,
 				agent_prompt: agentPrompt || undefined,
-				clickup_list_id: clickupListId || undefined,
 				parallel_limit: parallelLimit,
 			};
 
@@ -128,6 +138,18 @@
 			apiKeyValid = false;
 			apiKeyError = 'Invalid API key';
 		}
+	}
+
+	function handleClickUpChange(selection: {
+		workspaceId: string;
+		spaceId: string;
+		folderId: string;
+		listId: string;
+	}) {
+		clickupWorkspaceId = selection.workspaceId;
+		clickupSpaceId = selection.spaceId;
+		clickupFolderId = selection.folderId;
+		clickupListId = selection.listId;
 	}
 
 	async function handleFolderSelect(path: string, isNewRepo: boolean) {
@@ -384,21 +406,22 @@
 				</div>
 
 				{#if clickupApiKey && apiKeyValid}
-					<div>
-						<label for="clickup-list-id" class="block text-sm font-semibold text-gray-900">ClickUp List ID</label>
-						<input
-							id="clickup-list-id"
-							type="text"
-							bind:value={clickupListId}
-							placeholder="Optional"
-							class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+					<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+						<ClickUpBrowser
+							apiKey={clickupApiKey}
+							workspaceId={clickupWorkspaceId}
+							spaceId={clickupSpaceId}
+							folderId={clickupFolderId}
+							listId={clickupListId}
+							compact={true}
+							onchange={handleClickUpChange}
 						/>
 					</div>
 				{:else}
 					<div class="rounded-md bg-blue-50 p-4">
 						<p class="text-sm text-blue-700">
 							{#if !clickupApiKey}
-								Add a ClickUp API key above to configure your ClickUp workspace
+								Add a ClickUp API key above to browse your ClickUp workspace
 							{:else}
 								Validating API key...
 							{/if}
@@ -414,7 +437,9 @@
 						class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
 					>
 						<option value="claude">Claude</option>
-						<option value="gpt4">GPT-4</option>
+						<option value="codex">Codex</option>
+						<option value="gemini">Gemini</option>
+						<option value="opencode">OpenCode</option>
 					</select>
 				</div>
 

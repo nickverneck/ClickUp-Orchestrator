@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { getProject, updateProject, deleteProject, archiveProject, type Project } from '$lib/api/projects';
+	import { getWorkspaces } from '$lib/api/clickup';
+	import ClickUpBrowser from '$lib/components/settings/ClickUpBrowser.svelte';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 
@@ -18,10 +20,18 @@
 	let repoPath = $state('');
 	let devBranch = $state('dev');
 	let clickupApiKey = $state('');
+	let clickupWorkspaceId = $state('');
+	let clickupSpaceId = $state('');
+	let clickupFolderId = $state('');
 	let clickupListId = $state('');
 	let agentModel = $state('claude');
 	let agentPrompt = $state('');
 	let parallelLimit = $state(1);
+
+	// API key validation
+	let apiKeyValid = $state(false);
+	let apiKeyError = $state<string | null>(null);
+	let apiKeyChecked = $state(false);
 
 	onMount(async () => {
 		if (!$page.params.id) {
@@ -43,16 +53,57 @@
 			repoPath = project.repo_path;
 			devBranch = project.dev_branch;
 			clickupApiKey = project.clickup_api_key || '';
+			clickupWorkspaceId = project.clickup_workspace_id || '';
+			clickupSpaceId = project.clickup_space_id || '';
+			clickupFolderId = project.clickup_folder_id || '';
 			clickupListId = project.clickup_list_id || '';
 			agentModel = project.agent_model;
 			agentPrompt = project.agent_prompt || '';
 			parallelLimit = project.parallel_limit;
+
+			// If project already has an API key, validate it
+			if (clickupApiKey) {
+				await validateApiKey();
+			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load project';
 		} finally {
 			loading = false;
 		}
 	});
+
+	async function validateApiKey() {
+		if (!clickupApiKey.trim()) {
+			apiKeyValid = false;
+			apiKeyError = null;
+			apiKeyChecked = false;
+			return;
+		}
+
+		apiKeyChecked = false;
+		try {
+			await getWorkspaces(clickupApiKey);
+			apiKeyValid = true;
+			apiKeyError = null;
+		} catch (e) {
+			apiKeyValid = false;
+			apiKeyError = 'Invalid API key';
+		} finally {
+			apiKeyChecked = true;
+		}
+	}
+
+	function handleClickUpChange(selection: {
+		workspaceId: string;
+		spaceId: string;
+		folderId: string;
+		listId: string;
+	}) {
+		clickupWorkspaceId = selection.workspaceId;
+		clickupSpaceId = selection.spaceId;
+		clickupFolderId = selection.folderId;
+		clickupListId = selection.listId;
+	}
 
 	async function handleSave() {
 		saving = true;
@@ -66,6 +117,9 @@
 				repo_path: repoPath,
 				dev_branch: devBranch,
 				clickup_api_key: clickupApiKey || undefined,
+				clickup_workspace_id: clickupWorkspaceId || undefined,
+				clickup_space_id: clickupSpaceId || undefined,
+				clickup_folder_id: clickupFolderId || undefined,
 				clickup_list_id: clickupListId || undefined,
 				agent_model: agentModel,
 				agent_prompt: agentPrompt || undefined,
@@ -217,29 +271,48 @@
 				<!-- ClickUp Configuration -->
 				<div class="rounded-lg bg-white p-6 shadow-sm">
 					<h2 class="text-lg font-semibold text-gray-900">ClickUp Configuration</h2>
-				<div class="mt-6 space-y-6">
-					<div>
-						<label for="api-key" class="block text-sm font-semibold text-gray-900">API Key</label>
-						<input
-							id="api-key"
-							type="password"
-							bind:value={clickupApiKey}
-							placeholder="pk_..."
-							class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-						/>
-						<p class="mt-1 text-xs text-gray-500">Your ClickUp API key for this project</p>
+					<div class="mt-6 space-y-6">
+						<div>
+							<label for="api-key" class="block text-sm font-semibold text-gray-900">API Key</label>
+							<input
+								id="api-key"
+								type="password"
+								bind:value={clickupApiKey}
+								onchange={validateApiKey}
+								placeholder="pk_..."
+								class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+							/>
+							{#if apiKeyError}
+								<p class="mt-1 text-sm text-red-600">{apiKeyError}</p>
+							{:else if clickupApiKey && apiKeyValid}
+								<p class="mt-1 text-sm text-green-600">✓ API key is valid</p>
+							{:else}
+								<p class="mt-1 text-xs text-gray-500">Your ClickUp API key for this project</p>
+							{/if}
+						</div>
+
+						{#if clickupApiKey && apiKeyValid}
+							<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+								<ClickUpBrowser
+									apiKey={clickupApiKey}
+									workspaceId={clickupWorkspaceId}
+									spaceId={clickupSpaceId}
+									folderId={clickupFolderId}
+									listId={clickupListId}
+									compact={true}
+									onchange={handleClickUpChange}
+								/>
+							</div>
+						{:else if clickupApiKey && !apiKeyChecked}
+							<div class="rounded-md bg-blue-50 p-4">
+								<p class="text-sm text-blue-700">Validating API key...</p>
+							</div>
+						{:else if !clickupApiKey}
+							<div class="rounded-md bg-blue-50 p-4">
+								<p class="text-sm text-blue-700">Add a ClickUp API key above to browse your ClickUp workspace</p>
+							</div>
+						{/if}
 					</div>
-					<div>
-						<label for="list-id" class="block text-sm font-semibold text-gray-900">List ID</label>
-						<input
-							id="list-id"
-							type="text"
-							bind:value={clickupListId}
-							placeholder="Optional"
-							class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-						/>
-					</div>
-				</div>
 				</div>
 
 				<!-- Agent Configuration -->
@@ -254,7 +327,9 @@
 								class="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
 							>
 								<option value="claude">Claude</option>
-								<option value="gpt4">GPT-4</option>
+								<option value="codex">Codex</option>
+								<option value="gemini">Gemini</option>
+								<option value="opencode">OpenCode</option>
 							</select>
 						</div>
 
