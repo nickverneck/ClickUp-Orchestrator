@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createProject, cloneProjectFromGithub, type CreateProjectRequest } from '$lib/api/projects';
+	import { createProject, cloneProjectFromGithub, type CreateProjectRequest, checkGitStatus, initializeGit } from '$lib/api/projects';
 	import FolderPicker from '$lib/components/projects/FolderPicker.svelte';
 	import { goto } from '$app/navigation';
 
@@ -24,6 +24,9 @@
 	let clickupApiKey = $state('');
 	let apiKeyError = $state<string | null>(null);
 	let apiKeyValid = $state(false);
+
+	// Git status
+	let gitStatus = $state<{ isGitRepo: boolean; branch?: string; loading: boolean; error?: string } | null>(null);
 
 	function selectType(type: CreationType) {
 		creationType = type;
@@ -130,6 +133,59 @@
 			apiKeyError = 'Failed to validate API key';
 		}
 	}
+
+	async function handleFolderSelect(path: string, isNewRepo: boolean) {
+		if (isNewRepo) {
+			repoPath = path;
+			await checkRepoGitStatus(path);
+		} else {
+			targetPath = path;
+			await checkRepoGitStatus(path);
+		}
+	}
+
+	async function checkRepoGitStatus(path: string) {
+		gitStatus = { isGitRepo: false, loading: true };
+		try {
+			const status = await checkGitStatus(path);
+			gitStatus = {
+				isGitRepo: status.is_git_repo,
+				branch: status.branch || 'main',
+				loading: false,
+			};
+			if (status.is_git_repo && status.branch) {
+				devBranch = status.branch;
+			}
+		} catch (err) {
+			gitStatus = {
+				isGitRepo: false,
+				loading: false,
+				error: err instanceof Error ? err.message : 'Failed to check git status',
+			};
+		}
+	}
+
+	async function handleInitializeGit(path: string) {
+		if (!gitStatus) return;
+		gitStatus.loading = true;
+		gitStatus.error = undefined;
+
+		try {
+			const result = await initializeGit(path);
+			gitStatus = {
+				isGitRepo: true,
+				branch: result.branch,
+				loading: false,
+			};
+			devBranch = result.branch;
+		} catch (err) {
+			gitStatus = {
+				isGitRepo: false,
+				loading: false,
+				error: err instanceof Error ? err.message : 'Failed to initialize git',
+			};
+		}
+	}
 </script>
 
 <svelte:head>
@@ -221,11 +277,42 @@
 				{#if creationType === 'new'}
 					<div>
 						<label class="block text-sm font-semibold text-gray-900">Repository Path *</label>
-						<p class="mt-1 text-xs text-gray-500">Select an existing git repository</p>
+						<p class="mt-1 text-xs text-gray-500">Select an existing folder (will initialize git if needed)</p>
 						<div class="mt-3">
-							<FolderPicker onSelect={(path) => (repoPath = path)} selectedPath={repoPath} />
+							<FolderPicker onSelect={(path) => handleFolderSelect(path, true)} selectedPath={repoPath} />
 						</div>
 					</div>
+
+					{#if repoPath && gitStatus}
+						{#if gitStatus.loading}
+							<div class="rounded-md bg-blue-50 p-3">
+								<p class="text-sm text-blue-700">Checking git status...</p>
+							</div>
+						{:else if gitStatus.error}
+							<div class="rounded-md bg-red-50 p-3">
+								<p class="text-sm text-red-700">{gitStatus.error}</p>
+							</div>
+						{:else if gitStatus.isGitRepo}
+							<div class="rounded-md bg-green-50 p-3">
+								<p class="text-sm text-green-700">✓ Git repository found (branch: {gitStatus.branch})</p>
+							</div>
+						{:else}
+							<div class="space-y-3 rounded-md bg-amber-50 p-3">
+								<p class="text-sm text-amber-700">This folder is not a git repository. Would you like to initialize one?</p>
+								<button
+									onclick={() => handleInitializeGit(repoPath)}
+									disabled={gitStatus.loading}
+									class="inline-flex items-center rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+								>
+									{#if gitStatus.loading}
+										Initializing...
+									{:else}
+										Initialize Git
+									{/if}
+								</button>
+							</div>
+						{/if}
+					{/if}
 				{:else if creationType === 'clone'}
 					<div>
 						<label class="block text-sm font-semibold text-gray-900">GitHub Repository URL *</label>
@@ -241,7 +328,7 @@
 						<label class="block text-sm font-semibold text-gray-900">Clone Target Path *</label>
 						<p class="mt-1 text-xs text-gray-500">Select where to clone the repository</p>
 						<div class="mt-3">
-							<FolderPicker onSelect={(path) => (targetPath = path)} selectedPath={targetPath} />
+							<FolderPicker onSelect={(path) => handleFolderSelect(path, false)} selectedPath={targetPath} />
 						</div>
 					</div>
 				{/if}

@@ -1,7 +1,7 @@
 //! Projects controller for managing multi-project support
 
 use crate::models::_entities::projects;
-use crate::services::project_git::{clone_repo, validate_repo};
+use crate::services::project_git::{clone_repo, validate_repo, init_repo, get_current_branch};
 use loco_rs::prelude::*;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
@@ -54,6 +54,25 @@ pub struct FolderListResponse {
     pub base_path: String,
     pub folders: Vec<FolderInfo>,
     pub can_go_up: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CheckGitRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GitStatusResponse {
+    pub is_git_repo: bool,
+    pub branch: Option<String>,
+    pub path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InitGitResponse {
+    pub success: bool,
+    pub message: String,
+    pub branch: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -459,12 +478,80 @@ async fn list_folders(
     })
 }
 
+/// Check git status of a folder
+#[debug_handler]
+async fn check_git(
+    Json(params): Json<CheckGitRequest>,
+) -> Result<Response> {
+    let path = params.path.trim();
+    if path.is_empty() {
+        return Err(Error::BadRequest("path cannot be empty".to_string()));
+    }
+
+    let folder_path = PathBuf::from(path);
+    if !folder_path.exists() || !folder_path.is_dir() {
+        return Err(Error::BadRequest("Path does not exist or is not a directory".to_string()));
+    }
+
+    let is_git_repo = folder_path.join(".git").exists();
+    let branch = if is_git_repo {
+        get_current_branch(path).await.ok()
+    } else {
+        None
+    };
+
+    format::json(GitStatusResponse {
+        is_git_repo,
+        branch,
+        path: path.to_string(),
+    })
+}
+
+/// Initialize git repository in a folder
+#[debug_handler]
+async fn init_git(
+    Json(params): Json<CheckGitRequest>,
+) -> Result<Response> {
+    let path = params.path.trim();
+    if path.is_empty() {
+        return Err(Error::BadRequest("path cannot be empty".to_string()));
+    }
+
+    let folder_path = PathBuf::from(path);
+    if !folder_path.exists() || !folder_path.is_dir() {
+        return Err(Error::BadRequest("Path does not exist or is not a directory".to_string()));
+    }
+
+    // Check if already a git repo
+    if folder_path.join(".git").exists() {
+        return Err(Error::BadRequest("Path is already a git repository".to_string()));
+    }
+
+    // Initialize git
+    init_repo(path)
+        .await
+        .map_err(|e| Error::BadRequest(format!("Failed to initialize git: {}", e)))?;
+
+    // Get the initial branch name
+    let branch = get_current_branch(path)
+        .await
+        .unwrap_or_else(|_| "main".to_string());
+
+    format::json(InitGitResponse {
+        success: true,
+        message: "Git repository initialized successfully".to_string(),
+        branch,
+    })
+}
+
 pub fn routes() -> Routes {
     Routes::new()
         .prefix("/api/projects")
         .add("/", get(list_projects))
         .add("/", post(create_project))
         .add("/folders", get(list_folders))
+        .add("/git/check", post(check_git))
+        .add("/git/init", post(init_git))
         .add("/{id}", get(get_project))
         .add("/{id}", put(update_project))
         .add("/{id}", delete(delete_project))

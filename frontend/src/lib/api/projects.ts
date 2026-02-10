@@ -233,6 +233,18 @@ export interface FolderListResponse {
   can_go_up: boolean;
 }
 
+export interface GitStatusResponse {
+  is_git_repo: boolean;
+  branch?: string;
+  path: string;
+}
+
+export interface InitGitResponse {
+  success: boolean;
+  message: string;
+  branch: string;
+}
+
 /**
  * List available folders for project creation
  */
@@ -251,6 +263,45 @@ export async function listFolders(path?: string): Promise<FolderListResponse> {
 
   if (!response.ok) {
     throw new Error(`Failed to list folders: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Check git status of a folder
+ */
+export async function checkGitStatus(path: string): Promise<GitStatusResponse> {
+  const response = await fetch(`${API_BASE}/git/check`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ path }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to check git status: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Initialize git repository in a folder
+ */
+export async function initializeGit(path: string): Promise<InitGitResponse> {
+  const response = await fetch(`${API_BASE}/git/init`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ path }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to initialize git: ${error}`);
   }
 
   return response.json();
