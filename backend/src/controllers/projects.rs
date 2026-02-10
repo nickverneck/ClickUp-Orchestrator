@@ -2,6 +2,7 @@
 
 use crate::models::_entities::projects;
 use crate::services::project_git::{clone_repo, validate_repo, init_repo, get_current_branch};
+use axum::extract::Query;
 use loco_rs::prelude::*;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
@@ -73,6 +74,11 @@ pub struct InitGitResponse {
     pub success: bool,
     pub message: String,
     pub branch: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FolderListQuery {
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -406,7 +412,7 @@ async fn clone_project(
 /// List available folders for project creation
 #[debug_handler]
 async fn list_folders(
-    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    Query(params): Query<FolderListQuery>,
 ) -> Result<Response> {
     // Get base path from env or use home directory
     let base_path_str = std::env::var("PROJECTS_BASE_PATH")
@@ -419,9 +425,7 @@ async fn list_folders(
     let base_path = PathBuf::from(&base_path_str);
 
     // Get requested path from query params
-    let requested_path = params.get("path")
-        .map(|p| p.as_str())
-        .unwrap_or("");
+    let requested_path = params.path.as_deref().unwrap_or("");
 
     let mut current_path = if requested_path.is_empty() {
         base_path.clone()
