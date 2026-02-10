@@ -3,7 +3,7 @@
  * Persists to localStorage for session persistence
  */
 
-import { getProject, listProjects, type Project } from '$lib/api/projects';
+import { getProject, listProjects, type Project, type ProjectListItem } from '$lib/api/projects';
 
 const STORAGE_KEY = 'clickup-orchestrator-project-id';
 
@@ -15,7 +15,7 @@ interface ProjectStore {
   setProjectId: (id: number) => void;
   loadProject: (id: number) => Promise<void>;
   clearProject: () => void;
-  getAllProjects: () => Promise<Project[]>;
+  getAllProjects: () => Promise<ProjectListItem[]>;
 }
 
 function createProjectStore(): ProjectStore {
