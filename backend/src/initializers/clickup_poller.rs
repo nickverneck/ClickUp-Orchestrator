@@ -16,7 +16,8 @@ use sea_orm::{
 use std::time::Duration;
 use tokio::time::interval;
 
-use crate::models::_entities::{orchestrator_tasks, projects, settings};
+use crate::models::_entities::{orchestrator_tasks, settings};
+// use crate::models::_entities::projects; // TODO: Uncomment after migration
 use crate::services::clickup::{priority_to_int, ClickUpClient};
 use crate::services::process_manager::PROCESS_MANAGER;
 use crate::services::task_logs::{
@@ -459,64 +460,69 @@ impl ClickUpPollerInitializer {
     async fn poll_and_process(ctx: AppContext) {
         let db = &ctx.db;
 
+        // TODO: Uncomment multi-project support after migration
         // First, try new multi-project approach
-        let projects_result = projects::Entity::find()
-            .filter(projects::Column::Status.eq("active"))
-            .all(db)
-            .await;
+        // let projects_result = projects::Entity::find()
+        //     .filter(projects::Column::Status.eq("active"))
+        //     .all(db)
+        //     .await;
+        //
+        // match projects_result {
+        //     Ok(active_projects) if !active_projects.is_empty() => {
+        //         // Process each active project
+        //         for project in active_projects {
+        //             Self::poll_and_process_project(db, &project).await;
+        //         }
+        //     }
+        //     _ => {
+        //         // Fall back to legacy single-project mode
+        //         Self::poll_and_process_legacy(db).await;
+        //     }
+        // }
 
-        match projects_result {
-            Ok(active_projects) if !active_projects.is_empty() => {
-                // Process each active project
-                for project in active_projects {
-                    Self::poll_and_process_project(db, &project).await;
-                }
-            }
-            _ => {
-                // Fall back to legacy single-project mode
-                Self::poll_and_process_legacy(db).await;
-            }
-        }
+        // For now, use legacy mode only
+        Self::poll_and_process_legacy(db).await;
     }
 
-    async fn poll_and_process_project(
-        db: &sea_orm::DatabaseConnection,
-        project: &projects::Model,
-    ) {
-        let list_id = match project.clickup_list_id.as_deref() {
-            Some(id) if !id.is_empty() => id.to_string(),
-            _ => {
-                tracing::debug!(
-                    "Project {} has no ClickUp list configured, skipping",
-                    project.name
-                );
-                return;
-            }
-        };
-
-        let trigger_status = "Ready for Dev".to_string();  // Could be configurable per project
-        let target_status = "In Development".to_string();  // Could be configurable per project
-        let parallel_limit = project.parallel_limit as usize;
-        let target_repo_path = project.repo_path.clone();
-        let dev_branch = project.dev_branch.clone();
-        let agent_prompt = project.agent_prompt.clone();
-        let agent_model = project.agent_model.clone();
-        let project_id = project.id;
-
-        Self::poll_and_process_list(
-            db,
-            &list_id,
-            &trigger_status,
-            &target_status,
-            parallel_limit,
-            &target_repo_path,
-            &dev_branch,
-            &agent_prompt,
-            &agent_model,
-            Some(project_id),
-        )
-        .await;
-    }
+    // TODO: Uncomment after migration
+    // async fn poll_and_process_project(
+    //     db: &sea_orm::DatabaseConnection,
+    //     project: &projects::Model,
+    // ) {
+    //     let list_id = match project.clickup_list_id.as_deref() {
+    //         Some(id) if !id.is_empty() => id.to_string(),
+    //         _ => {
+    //             tracing::debug!(
+    //                 "Project {} has no ClickUp list configured, skipping",
+    //                 project.name
+    //             );
+    //             return;
+    //         }
+    //     };
+    //
+    //     let trigger_status = "Ready for Dev".to_string();  // Could be configurable per project
+    //     let target_status = "In Development".to_string();  // Could be configurable per project
+    //     let parallel_limit = project.parallel_limit as usize;
+    //     let target_repo_path = project.repo_path.clone();
+    //     let dev_branch = project.dev_branch.clone();
+    //     let agent_prompt = project.agent_prompt.clone();
+    //     let agent_model = project.agent_model.clone();
+    //     let project_id = project.id;
+    //
+    //     Self::poll_and_process_list(
+    //         db,
+    //         &list_id,
+    //         &trigger_status,
+    //         &target_status,
+    //         parallel_limit,
+    //         &target_repo_path,
+    //         &dev_branch,
+    //         &agent_prompt,
+    //         &agent_model,
+    //         Some(project_id),
+    //     )
+    //     .await;
+    // }
 
     async fn poll_and_process_legacy(db: &sea_orm::DatabaseConnection) {
         // Get global settings (legacy single-project mode)

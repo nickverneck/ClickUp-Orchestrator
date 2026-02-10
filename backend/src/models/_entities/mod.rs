@@ -5,6 +5,7 @@ pub mod prelude;
 pub mod orchestrator_task_logs;
 pub mod orchestrator_tasks;
 pub mod process_sessions;
+pub mod projects;
 pub mod settings;
 pub mod users;
 pub mod workflow_configs;

@@ -292,34 +292,35 @@ async fn list_workflows(State(ctx): State<AppContext>) -> Result<Response> {
     format::json(workflows)
 }
 
-#[debug_handler]
-async fn list_project_workflows(
-    State(ctx): State<AppContext>,
-    Path(project_id): Path<i32>,
-) -> Result<Response> {
-    use sea_orm::ColumnTrait;
-
-    // Verify project exists
-    let _project = crate::models::_entities::projects::Entity::find_by_id(project_id)
-        .one(&ctx.db)
-        .await?
-        .ok_or(Error::NotFound)?;
-
-    let workflows = workflow_configs::Entity::find()
-        .filter(workflow_configs::Column::ProjectId.eq(project_id))
-        .order_by_desc(workflow_configs::Column::UpdatedAt)
-        .all(&ctx.db)
-        .await?
-        .into_iter()
-        .map(|model| WorkflowListItem {
-            id: model.id,
-            name: display_name(&model.name, model.id),
-            status: WorkflowStatus::from_db(&model.status),
-        })
-        .collect::<Vec<_>>();
-
-    format::json(workflows)
-}
+// TODO: Uncomment after projects table migration
+// #[debug_handler]
+// async fn list_project_workflows(
+//     State(ctx): State<AppContext>,
+//     Path(project_id): Path<i32>,
+// ) -> Result<Response> {
+//     use sea_orm::ColumnTrait;
+//
+//     // Verify project exists
+//     let _project = crate::models::_entities::projects::Entity::find_by_id(project_id)
+//         .one(&ctx.db)
+//         .await?
+//         .ok_or(Error::NotFound)?;
+//
+//     let workflows = workflow_configs::Entity::find()
+//         .filter(workflow_configs::Column::ProjectId.eq(project_id))
+//         .order_by_desc(workflow_configs::Column::UpdatedAt)
+//         .all(&ctx.db)
+//         .await?
+//         .into_iter()
+//         .map(|model| WorkflowListItem {
+//             id: model.id,
+//             name: display_name(&model.name, model.id),
+//             status: WorkflowStatus::from_db(&model.status),
+//         })
+//         .collect::<Vec<_>>();
+//
+//     format::json(workflows)
+// }
 
 #[debug_handler]
 async fn create_workflow(
@@ -348,39 +349,40 @@ async fn create_workflow(
     })
 }
 
-#[debug_handler]
-async fn create_project_workflow(
-    State(ctx): State<AppContext>,
-    Path(project_id): Path<i32>,
-    Json(params): Json<CreateWorkflowRequest>,
-) -> Result<Response> {
-    // Verify project exists
-    let _project = crate::models::_entities::projects::Entity::find_by_id(project_id)
-        .one(&ctx.db)
-        .await?
-        .ok_or(Error::NotFound)?;
-
-    let name = normalized_name(params.name, "New Workflow");
-    let config = default_workflow_config();
-    let now = chrono::Utc::now();
-    let record = workflow_configs::ActiveModel {
-        name: Set(name.clone()),
-        status: Set(WorkflowStatus::Paused.as_str().to_string()),
-        config: Set(serde_json::to_string(&config)?),
-        project_id: Set(Some(project_id)),
-        created_at: Set(now.into()),
-        updated_at: Set(now.into()),
-        ..Default::default()
-    };
-    let inserted = record.insert(&ctx.db).await?;
-
-    format::json(WorkflowResponse {
-        id: inserted.id,
-        name,
-        status: WorkflowStatus::Paused,
-        config,
-    })
-}
+// TODO: Uncomment after projects table migration
+// #[debug_handler]
+// async fn create_project_workflow(
+//     State(ctx): State<AppContext>,
+//     Path(project_id): Path<i32>,
+//     Json(params): Json<CreateWorkflowRequest>,
+// ) -> Result<Response> {
+//     // Verify project exists
+//     let _project = crate::models::_entities::projects::Entity::find_by_id(project_id)
+//         .one(&ctx.db)
+//         .await?
+//         .ok_or(Error::NotFound)?;
+//
+//     let name = normalized_name(params.name, "New Workflow");
+//     let config = default_workflow_config();
+//     let now = chrono::Utc::now();
+//     let record = workflow_configs::ActiveModel {
+//         name: Set(name.clone()),
+//         status: Set(WorkflowStatus::Paused.as_str().to_string()),
+//         config: Set(serde_json::to_string(&config)?),
+//         project_id: Set(Some(project_id)),
+//         created_at: Set(now.into()),
+//         updated_at: Set(now.into()),
+//         ..Default::default()
+//     };
+//     let inserted = record.insert(&ctx.db).await?;
+//
+//     format::json(WorkflowResponse {
+//         id: inserted.id,
+//         name,
+//         status: WorkflowStatus::Paused,
+//         config,
+//     })
+// }
 
 #[debug_handler]
 async fn get_workflow(State(ctx): State<AppContext>, Path(id): Path<i32>) -> Result<Response> {
@@ -579,10 +581,10 @@ pub fn routes() -> Routes {
         .add("/{id}/status", put(update_status))
         .add("/{id}/start", post(start_workflow))
         .add("/{id}/pause", post(pause_workflow))
-        // Project-scoped routes
-        .prefix("/api/projects/{project_id}/workflows")
-        .add("/", get(list_project_workflows))
-        .add("/", post(create_project_workflow))
+    // TODO: Uncomment project-scoped routes after migration
+    // .prefix("/api/projects/{project_id}/workflows")
+    // .add("/", get(list_project_workflows))
+    // .add("/", post(create_project_workflow))
 }
 
 pub fn legacy_routes() -> Routes {

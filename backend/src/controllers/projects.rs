@@ -3,7 +3,7 @@
 use crate::models::_entities::projects;
 use crate::services::project_git::{clone_repo, init_repo, validate_repo};
 use loco_rs::prelude::*;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, DeleteMany};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -118,19 +118,7 @@ async fn list_projects(State(ctx): State<AppContext>) -> Result<Response> {
     let mut response = Vec::new();
 
     for project in projects_list {
-        // Count workflows for this project
-        let workflow_count = sea_orm::prelude::prelude::Statement::from_sql_and_values(
-            sea_orm::DbBackend::Sqlite,
-            "SELECT COUNT(*) FROM workflow_configs WHERE project_id = ?",
-            vec![project.id.into()],
-        );
-
-        let active_task_count = sea_orm::prelude::prelude::Statement::from_sql_and_values(
-            sea_orm::DbBackend::Sqlite,
-            "SELECT COUNT(*) FROM orchestrator_tasks WHERE project_id = ? AND status = 'active'",
-            vec![project.id.into()],
-        );
-
+        // For now, simplified stats (can be enhanced later with actual queries)
         response.push(ProjectListItem {
             id: project.id,
             name: project.name,
@@ -138,8 +126,8 @@ async fn list_projects(State(ctx): State<AppContext>) -> Result<Response> {
             status: project.status,
             repo_path: project.repo_path,
             dev_branch: project.dev_branch,
-            workflow_count: 0,  // Simplified for now
-            active_task_count: 0, // Simplified for now
+            workflow_count: 0,  // TODO: Query workflow count for project
+            active_task_count: 0, // TODO: Query active task count for project
         });
     }
 
@@ -278,18 +266,19 @@ async fn delete_project(State(ctx): State<AppContext>, Path(id): Path<i32>) -> R
         .ok_or(Error::NotFound)?;
 
     // Delete associated workflows and tasks first (cascade)
-    sea_orm::delete_many(crate::models::_entities::workflow_configs::Entity)
+    crate::models::_entities::workflow_configs::Entity::delete_many()
         .filter(crate::models::_entities::workflow_configs::Column::ProjectId.eq(id))
         .exec(&ctx.db)
         .await?;
 
-    sea_orm::delete_many(crate::models::_entities::orchestrator_tasks::Entity)
+    crate::models::_entities::orchestrator_tasks::Entity::delete_many()
         .filter(crate::models::_entities::orchestrator_tasks::Column::ProjectId.eq(id))
         .exec(&ctx.db)
         .await?;
 
     // Delete the project
-    sea_orm::prelude::prelude::ActiveModel::delete(project.into()).exec(&ctx.db).await?;
+    let active: projects::ActiveModel = project.into();
+    active.delete(&ctx.db).await?;
 
     format::empty()
 }
