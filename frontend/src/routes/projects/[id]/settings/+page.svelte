@@ -198,22 +198,16 @@
 	<title>Project Settings - ClickUp Orchestrator</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-50">
+<div class="flex-1 overflow-auto">
 	<!-- Header -->
 	<div class="bg-white shadow">
 		<div class="mx-auto max-w-2xl px-4 py-6 sm:px-6 lg:px-8">
-			<button onclick={goBack} class="mb-4 inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500">
-				<svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-				</svg>
-				Back
-			</button>
-			<h1 class="text-3xl font-bold tracking-tight text-gray-900">Project Settings</h1>
+			<h1 class="text-2xl font-semibold text-gray-900">Project Settings</h1>
 		</div>
 	</div>
 
 	<!-- Content -->
-	<main class="mx-auto max-w-2xl px-4 py-12 sm:px-6 lg:px-8">
+	<main class="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8">
 		{#if loading}
 			<div class="flex items-center justify-center py-12">
 				<svg class="h-12 w-12 animate-spin text-indigo-600" viewBox="0 0 24 24">

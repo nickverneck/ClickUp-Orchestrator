@@ -8,6 +8,8 @@
 	import { UIRefinementsWebSocket, type SessionWsMessage } from '$lib/api/ui-refinements-ws';
 	import { getSettings } from '$lib/api/settings';
 	import { createUuid } from '$lib/utils/uuid';
+	import { projectStore } from '$lib/stores/project.svelte';
+	import { getProject } from '$lib/api/projects';
 
 	let sidebarCollapsed = $state(false);
 
@@ -19,6 +21,7 @@
 	let sessionId = $state<string | null>(null);
 	let wsClient = $state<UIRefinementsWebSocket | null>(null);
 	let targetRepoPath = $state<string>('');
+	let projectName = $state('');
 
 	// Chat state
 	let messages = $state<ChatMessage[]>([]);
@@ -47,11 +50,21 @@
 			previewUrl = savedPreviewUrl;
 		}
 
-		// Load target repo path from settings
+		// Try to load target repo path from selected project first, then fall back to global settings
 		try {
-			const settings = await getSettings();
-			if (settings.target_repo_path) {
-				targetRepoPath = settings.target_repo_path;
+			if (projectStore.currentProjectId) {
+				const project = await getProject(projectStore.currentProjectId);
+				if (project?.repo_path) {
+					targetRepoPath = project.repo_path;
+					projectName = project.name;
+				}
+			}
+
+			if (!targetRepoPath) {
+				const settings = await getSettings();
+				if (settings.target_repo_path) {
+					targetRepoPath = settings.target_repo_path;
+				}
 			}
 		} catch (e) {
 			console.error('Failed to load settings:', e);
@@ -272,6 +285,9 @@
 					>
 						EXPERIMENTAL
 					</span>
+					{#if projectName}
+						<span class="text-xs font-medium bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">{projectName}</span>
+					{/if}
 				</div>
 				{#if currentBranch}
 					<div class="flex items-center gap-2 text-sm">

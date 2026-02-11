@@ -7,6 +7,8 @@
 	import { getSettings } from '$lib/api/settings';
 	import { getFileContent, saveFile } from '$lib/api/files';
 	import { createUuid } from '$lib/utils/uuid';
+	import { projectStore } from '$lib/stores/project.svelte';
+	import { getProject } from '$lib/api/projects';
 
 	let sidebarCollapsed = $state(false);
 
@@ -14,6 +16,7 @@
 	let fileTree = $state<FileNode[]>([]);
 	let expandedFolders = $state<Set<string>>(new Set());
 	let rootPath = $state('');
+	let projectName = $state('');
 	let loading = $state(true);
 
 	// Editor state
@@ -27,14 +30,24 @@
 			sidebarCollapsed = saved === 'true';
 		}
 
-		// Load root path from settings
+		// Try to load root path from selected project first, then fall back to global settings
 		try {
-			const settings = await getSettings();
-			if (settings.target_repo_path) {
-				rootPath = settings.target_repo_path;
+			if (projectStore.currentProjectId) {
+				const project = await getProject(projectStore.currentProjectId);
+				if (project?.repo_path) {
+					rootPath = project.repo_path;
+					projectName = project.name;
+				}
+			}
+
+			if (!rootPath) {
+				const settings = await getSettings();
+				if (settings.target_repo_path) {
+					rootPath = settings.target_repo_path;
+				}
 			}
 		} catch (e) {
-			console.error('Failed to load target_repo_path:', e);
+			console.error('Failed to load repo path:', e);
 		}
 		loading = false;
 	});
@@ -177,6 +190,9 @@
 				</div>
 				{#if rootPath}
 					<div class="flex items-center gap-2 text-sm">
+						{#if projectName}
+							<span class="text-xs font-medium bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">{projectName}</span>
+						{/if}
 						<svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 						</svg>
@@ -198,16 +214,16 @@
 						<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 						</svg>
-						<h3 class="mt-2 text-sm font-medium text-gray-900">No project configured</h3>
+						<h3 class="mt-2 text-sm font-medium text-gray-900">No project selected</h3>
 						<p class="mt-1 text-sm text-gray-500">
-							Configure a target repository in Settings to use the file editor.
+							Select a project from the sidebar to browse its files.
 						</p>
 						<div class="mt-6">
 							<a
-								href="/settings"
+								href="/projects"
 								class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
 							>
-								Go to Settings
+								Go to Projects
 							</a>
 						</div>
 					</div>
