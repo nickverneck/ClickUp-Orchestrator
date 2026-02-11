@@ -92,6 +92,9 @@ export function useTasks(projectId?: number) {
 		get error() {
 			return error;
 		},
+		setProjectId(id: number) {
+			currentProjectId = id;
+		},
 		loadTasks,
 		loadStats,
 		stop,

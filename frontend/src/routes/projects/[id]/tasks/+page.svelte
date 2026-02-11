@@ -10,7 +10,7 @@
 	let projectId: number;
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let tasks: ReturnType<typeof useTasks>;
+	const tasks = useTasks();
 
 	// Delete confirmation modal state
 	let deleteModalOpen = $state(false);
@@ -35,8 +35,8 @@
 		// Set current project
 		projectStore.setProjectId(projectId);
 
-		// Initialize tasks store with project scope
-		tasks = useTasks(projectId);
+		// Set project scope for tasks
+		tasks.setProjectId(projectId);
 		await tasks.loadTasks();
 		await tasks.loadStats();
 		loading = false;

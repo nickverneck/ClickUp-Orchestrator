@@ -9,7 +9,7 @@
 	let project = $state.raw(projectStore.project);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let tasks: ReturnType<typeof useTasks>;
+	const tasks = useTasks();
 	let refreshInterval: ReturnType<typeof setInterval>;
 
 	onMount(async () => {
@@ -29,7 +29,7 @@
 			await projectStore.loadProject(projectId);
 			project = projectStore.project;
 
-			tasks = useTasks(projectId);
+			tasks.setProjectId(projectId);
 			await tasks.loadStats();
 			refreshInterval = setInterval(() => tasks.loadStats(), 10000);
 		} catch (err) {
