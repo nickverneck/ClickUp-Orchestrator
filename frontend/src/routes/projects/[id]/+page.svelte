@@ -2,12 +2,15 @@
 	import { page } from '$app/stores';
 	import { getProject } from '$lib/api/projects';
 	import { projectStore } from '$lib/stores/project.svelte';
+	import { useTasks } from '$lib/stores/tasks.svelte';
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 
 	let project = $state.raw(projectStore.project);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let tasks: ReturnType<typeof useTasks>;
+	let refreshInterval: ReturnType<typeof setInterval>;
 
 	onMount(async () => {
 		if (!$page.params.id) {
@@ -25,12 +28,24 @@
 		try {
 			await projectStore.loadProject(projectId);
 			project = projectStore.project;
+
+			tasks = useTasks(projectId);
+			await tasks.loadStats();
+			refreshInterval = setInterval(() => tasks.loadStats(), 10000);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load project';
 		} finally {
 			loading = false;
 		}
 	});
+
+	onDestroy(() => {
+		if (refreshInterval) clearInterval(refreshInterval);
+	});
+
+	function goToTasks() {
+		goto(`/projects/${project?.id}/tasks`);
+	}
 
 	function goToWorkflows() {
 		goto(`/projects/${project?.id}/workflows`);
@@ -39,26 +54,16 @@
 	function goToSettings() {
 		goto(`/projects/${project?.id}/settings`);
 	}
-
-	function goBack() {
-		goto('/projects');
-	}
 </script>
 
 <svelte:head>
 	<title>{project?.name || 'Project'} - ClickUp Orchestrator</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gray-50">
+<div class="flex-1 overflow-auto">
 	<!-- Header -->
 	<div class="bg-white shadow">
 		<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-			<button onclick={goBack} class="mb-4 inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500">
-				<svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-				</svg>
-				All Projects
-			</button>
 			<div class="flex items-center justify-between">
 				<div>
 					<h1 class="text-3xl font-bold tracking-tight text-gray-900">{project?.name || 'Loading...'}</h1>
@@ -92,7 +97,7 @@
 	</div>
 
 	<!-- Content -->
-	<main class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+	<main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 		{#if loading}
 			<div class="flex items-center justify-center py-12">
 				<svg class="h-12 w-12 animate-spin text-indigo-600" viewBox="0 0 24 24">
@@ -105,6 +110,38 @@
 				<p class="text-sm text-red-700">{error}</p>
 			</div>
 		{:else if project}
+			<!-- Task Stats Summary -->
+			{#if tasks?.stats}
+				<button onclick={goToTasks} class="w-full mb-6 rounded-lg bg-white p-6 shadow-sm hover:shadow-md transition-shadow text-left">
+					<div class="flex items-center justify-between">
+						<h3 class="text-sm font-semibold text-gray-900">Agent Tasks</h3>
+						<span class="text-xs text-indigo-600 font-medium">View Kanban Board &rarr;</span>
+					</div>
+					<div class="mt-4 grid grid-cols-5 gap-4">
+						<div class="text-center">
+							<div class="text-2xl font-bold text-gray-600">{tasks.stats.queued}</div>
+							<div class="text-xs text-gray-500">Queued</div>
+						</div>
+						<div class="text-center">
+							<div class="text-2xl font-bold text-blue-600">{tasks.stats.in_progress}</div>
+							<div class="text-xs text-gray-500">In Progress</div>
+						</div>
+						<div class="text-center">
+							<div class="text-2xl font-bold text-green-600">{tasks.stats.running_processes}</div>
+							<div class="text-xs text-gray-500">Running</div>
+						</div>
+						<div class="text-center">
+							<div class="text-2xl font-bold text-green-700">{tasks.stats.completed}</div>
+							<div class="text-xs text-gray-500">Completed</div>
+						</div>
+						<div class="text-center">
+							<div class="text-2xl font-bold {tasks.stats.failed > 0 ? 'text-red-600' : 'text-gray-400'}">{tasks.stats.failed}</div>
+							<div class="text-xs text-gray-500">Failed</div>
+						</div>
+					</div>
+				</button>
+			{/if}
+
 			<!-- Project Overview -->
 			<div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
 				<!-- Repository Info -->

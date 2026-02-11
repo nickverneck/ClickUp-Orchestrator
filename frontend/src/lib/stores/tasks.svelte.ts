@@ -7,13 +7,18 @@ let tasks = $state<Task[]>([]);
 let stats = $state<TaskStats | null>(null);
 let loading = $state(false);
 let error = $state<string | null>(null);
+let currentProjectId = $state<number | undefined>(undefined);
 
-export function useTasks() {
+export function useTasks(projectId?: number) {
+	if (projectId !== undefined) {
+		currentProjectId = projectId;
+	}
+
 	async function loadTasks() {
 		loading = true;
 		error = null;
 		try {
-			tasks = await getTasks();
+			tasks = await getTasks(currentProjectId ? { project_id: currentProjectId } : undefined);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load tasks';
 		} finally {

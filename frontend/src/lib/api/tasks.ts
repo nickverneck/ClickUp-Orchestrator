@@ -42,9 +42,12 @@ export interface TaskStats {
 	running_processes: number;
 }
 
-export async function getTasks(status?: string): Promise<Task[]> {
-	const query = status ? `?status=${encodeURIComponent(status)}` : '';
-	return get<Task[]>(`/tasks${query}`);
+export async function getTasks(options?: { status?: string; project_id?: number }): Promise<Task[]> {
+	const params = new URLSearchParams();
+	if (options?.status) params.set('status', options.status);
+	if (options?.project_id) params.set('project_id', options.project_id.toString());
+	const query = params.toString();
+	return get<Task[]>(`/tasks${query ? `?${query}` : ''}`);
 }
 
 export async function getTask(id: number): Promise<Task> {
