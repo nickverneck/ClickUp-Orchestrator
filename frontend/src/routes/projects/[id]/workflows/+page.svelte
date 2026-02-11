@@ -2,11 +2,12 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { get } from '$lib/api/client';
+	import { get, post } from '$lib/api/client';
 
 	let projectId: number;
 	let workflows = $state<any[]>([]);
 	let loading = $state(true);
+	let creating = $state(false);
 	let error = $state<string | null>(null);
 
 	onMount(async () => {
@@ -31,12 +32,22 @@
 		}
 	});
 
-	function createWorkflow() {
-		goto(`/projects/${projectId}/workflows/new`);
+	async function createWorkflow() {
+		if (creating) return;
+		creating = true;
+		error = null;
+		try {
+			const created = await post<any>(`/projects/${projectId}/workflows`);
+			goto(`/workflow/${created.id}`);
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to create workflow';
+		} finally {
+			creating = false;
+		}
 	}
 
 	function editWorkflow(id: number) {
-		goto(`/projects/${projectId}/workflows/${id}`);
+		goto(`/workflow/${id}`);
 	}
 </script>
 
@@ -52,12 +63,13 @@
 				<h1 class="text-2xl font-semibold text-gray-900">Workflows</h1>
 				<button
 					onclick={createWorkflow}
-					class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+					disabled={creating}
+					class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					<svg class="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
 					</svg>
-					New Workflow
+					{creating ? 'Creating...' : 'New Workflow'}
 				</button>
 			</div>
 		</div>
