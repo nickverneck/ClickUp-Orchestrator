@@ -37,7 +37,7 @@
 		creating = true;
 		error = null;
 		try {
-			const created = await post<any>(`/projects/${projectId}/workflows`);
+			const created = await post<any>(`/projects/${projectId}/workflows`, {});
 			goto(`/workflow/${created.id}`);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to create workflow';
