@@ -73,6 +73,7 @@ impl Hooks for App {
             .add_route(controllers::projects::routes())
             .add_route(controllers::agents::routes())
             .add_route(controllers::workflow::routes())
+            .add_route(controllers::workflow::project_routes())
             .add_route(controllers::workflow::legacy_routes())
             .add_route(
                 loco_rs::controller::Routes::new()
