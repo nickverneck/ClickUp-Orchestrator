@@ -1,38 +1,31 @@
 <script lang="ts">
 	import { get, post } from '$lib/api/client';
-	import { getSettings } from '$lib/api/settings';
-	import { onMount } from 'svelte';
 
 	interface Props {
+		targetRepoPath: string;
 		onBranchCreate: (branchName: string) => void;
 	}
 
-	let { onBranchCreate }: Props = $props();
+	let { targetRepoPath, onBranchCreate }: Props = $props();
 
 	let isLoading = $state(true);
 	let isCreating = $state(false);
 	let branchName = $state('');
 	let error = $state('');
-	let targetRepoPath = $state('');
 	let existingBranches = $state<string[]>([]);
 	let selectedExisting = $state<string | null>(null);
 	let mode = $state<'select' | 'create'>('select');
 
 	// Auto-generate branch name suggestion
 	const suggestedName = `ui-refinements-${new Date().toISOString().slice(0, 10)}-${Math.random().toString(36).slice(2, 6)}`;
+	branchName = suggestedName;
 
-	onMount(async () => {
-		branchName = suggestedName;
-		try {
-			const settings = await getSettings();
-			if (settings.target_repo_path) {
-				targetRepoPath = settings.target_repo_path;
-				await loadExistingBranches();
-			}
-		} catch (e) {
-			console.error('Failed to load settings:', e);
-		} finally {
-			isLoading = false;
+	// Load branches when targetRepoPath becomes available
+	$effect(() => {
+		if (targetRepoPath) {
+			loadExistingBranches().finally(() => {
+				isLoading = false;
+			});
 		}
 	});
 
