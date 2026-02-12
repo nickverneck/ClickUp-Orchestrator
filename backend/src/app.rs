@@ -72,6 +72,7 @@ impl Hooks for App {
             .add_route(controllers::ui_refinements::routes())
             .add_route(controllers::projects::routes())
             .add_route(controllers::agents::routes())
+            .add_route(controllers::devserver::routes())
             .add_route(controllers::workflow::routes())
             .add_route(controllers::workflow::project_routes())
             .add_route(controllers::workflow::legacy_routes())

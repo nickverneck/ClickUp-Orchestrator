@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod auth;
 pub mod clickup;
+pub mod devserver;
 pub mod files;
 pub mod git;
 pub mod projects;

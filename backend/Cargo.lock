@@ -379,6 +379,7 @@ dependencies = [
  "include_dir",
  "insta",
  "lazy_static",
+ "libc",
  "loco-rs",
  "migration",
  "regex",

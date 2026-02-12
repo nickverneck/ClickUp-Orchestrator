@@ -8,22 +8,11 @@
 
 	let { selected, onChange }: Props = $props();
 
-	const agents: { id: AgentType; label: string; icon: string }[] = [
-		{
-			id: 'claude',
-			label: 'Claude',
-			icon: '🟣'
-		},
-		{
-			id: 'codex',
-			label: 'Codex',
-			icon: '🟢'
-		},
-		{
-			id: 'gemini',
-			label: 'Gemini',
-			icon: '🔵'
-		}
+	const agents: { id: AgentType; label: string }[] = [
+		{ id: 'claude', label: 'Claude' },
+		{ id: 'codex', label: 'Codex' },
+		{ id: 'gemini', label: 'Gemini' },
+		{ id: 'opencode', label: 'OpenCode' }
 	];
 
 	let isOpen = $state(false);
@@ -48,7 +37,6 @@
 		onclick={() => (isOpen = !isOpen)}
 		class="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
 	>
-		<span>{agents.find((a) => a.id === selected)?.icon}</span>
 		<span class="font-medium text-gray-700">{agents.find((a) => a.id === selected)?.label}</span>
 		<svg
 			class="w-4 h-4 text-gray-400 transition-transform {isOpen ? 'rotate-180' : ''}"
@@ -69,7 +57,6 @@
 						? 'bg-indigo-50'
 						: ''}"
 				>
-					<span>{agent.icon}</span>
 					<span class="text-sm font-medium text-gray-700">{agent.label}</span>
 					{#if selected === agent.id}
 						<svg class="w-4 h-4 text-indigo-600 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">

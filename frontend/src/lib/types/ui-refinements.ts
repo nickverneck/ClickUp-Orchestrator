@@ -1,4 +1,4 @@
-export type AgentType = 'claude' | 'codex' | 'gemini';
+export type AgentType = 'claude' | 'codex' | 'gemini' | 'opencode';
 
 export interface ChatMessage {
 	id: string;

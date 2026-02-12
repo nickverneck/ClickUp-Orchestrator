@@ -3,8 +3,9 @@
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import BranchProtectionOverlay from '$lib/components/ui-refinements/BranchProtectionOverlay.svelte';
 	import ChatPanel from '$lib/components/ui-refinements/ChatPanel.svelte';
+	import DevServerButton from '$lib/components/ui-refinements/DevServerButton.svelte';
 	import PreviewPanel from '$lib/components/ui-refinements/PreviewPanel.svelte';
-	import type { ChatMessage, QueuedMessage, ElementMetadata } from '$lib/types/ui-refinements';
+	import type { AgentType, ChatMessage, QueuedMessage, ElementMetadata } from '$lib/types/ui-refinements';
 	import { UIRefinementsWebSocket, type SessionWsMessage } from '$lib/api/ui-refinements-ws';
 	import { getSettings } from '$lib/api/settings';
 	import { createUuid } from '$lib/utils/uuid';
@@ -27,7 +28,7 @@
 	let messages = $state<ChatMessage[]>([]);
 	let messageQueue = $state<QueuedMessage[]>([]);
 	let isProcessing = $state(false);
-	let selectedAgent = $state<'claude' | 'codex' | 'gemini'>('claude');
+	let selectedAgent = $state<AgentType>('claude');
 	let currentAssistantMessageId = $state<string | null>(null);
 
 	// Preview state
@@ -289,15 +290,20 @@
 						<span class="text-xs font-medium bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">{projectName}</span>
 					{/if}
 				</div>
-				{#if currentBranch}
-					<div class="flex items-center gap-2 text-sm">
-						<svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-						</svg>
-						<span class="text-gray-600">Branch:</span>
-						<span class="font-mono text-indigo-600">{currentBranch}</span>
-					</div>
-				{/if}
+				<div class="flex items-center gap-3">
+					{#if targetRepoPath}
+						<DevServerButton repoPath={targetRepoPath} />
+					{/if}
+					{#if currentBranch}
+						<div class="flex items-center gap-2 text-sm">
+							<svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+							</svg>
+							<span class="text-gray-600">Branch:</span>
+							<span class="font-mono text-indigo-600">{currentBranch}</span>
+						</div>
+					{/if}
+				</div>
 			</div>
 		</div>
 

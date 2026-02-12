@@ -6,6 +6,12 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::{broadcast, mpsc, Mutex};
 
+/// Lightweight handle for dev server processes (no stdin needed)
+pub struct DevServerHandle {
+    pub pid: u32,
+    kill_tx: mpsc::Sender<()>,
+}
+
 #[derive(Debug, Clone)]
 pub struct OutputLine {
     pub task_id: i32,
@@ -44,6 +50,8 @@ pub struct ProcessManager {
     // Session-based processes for UI refinements
     session_processes: Arc<DashMap<String, ProcessHandle>>,
     session_output_tx: broadcast::Sender<SessionOutputLine>,
+    // Dev server processes (keyed by repo_path)
+    devserver_processes: Arc<DashMap<String, DevServerHandle>>,
 }
 
 impl Clone for ProcessManager {
@@ -55,6 +63,7 @@ impl Clone for ProcessManager {
             output_buffers: Arc::clone(&self.output_buffers),
             session_processes: Arc::clone(&self.session_processes),
             session_output_tx: self.session_output_tx.clone(),
+            devserver_processes: Arc::clone(&self.devserver_processes),
         }
     }
 }
@@ -77,6 +86,7 @@ impl ProcessManager {
             output_buffers: Arc::new(DashMap::new()),
             session_processes: Arc::new(DashMap::new()),
             session_output_tx,
+            devserver_processes: Arc::new(DashMap::new()),
         }
     }
 
@@ -584,6 +594,115 @@ impl ProcessManager {
                 .output()
                 .await;
         }
+
+        Ok(())
+    }
+
+    // ============ Dev Server methods ============
+
+    /// Check if a dev server is running for a given key
+    pub fn is_devserver_running(&self, key: &str) -> bool {
+        self.devserver_processes.contains_key(key)
+    }
+
+    /// Spawn a dev server process
+    pub async fn spawn_devserver(
+        &self,
+        key: &str,
+        command: &str,
+        args: &[&str],
+        working_dir: &str,
+    ) -> Result<u32, String> {
+        if self.is_devserver_running(key) {
+            return Err(format!("Dev server already running for {}", key));
+        }
+
+        tracing::info!(
+            "Spawning dev server: {} {:?} in {}",
+            command,
+            args,
+            working_dir
+        );
+
+        let mut cmd = Command::new(command);
+        cmd.args(args)
+            .current_dir(working_dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+
+        // Use process_group(0) on Unix so we can kill the entire process group
+        #[cfg(unix)]
+        {
+            unsafe {
+                cmd.pre_exec(|| {
+                    libc::setpgid(0, 0);
+                    Ok(())
+                });
+            }
+        }
+
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| format!("Failed to spawn dev server: {}", e))?;
+
+        let pid = child.id().unwrap_or(0);
+
+        let (kill_tx, mut kill_rx) = mpsc::channel::<()>(1);
+
+        let handle = DevServerHandle { pid, kill_tx };
+        self.devserver_processes.insert(key.to_string(), handle);
+
+        // Spawn a task to wait for exit or kill signal, then clean up
+        let processes = Arc::clone(&self.devserver_processes);
+        let key_owned = key.to_string();
+        tokio::spawn(async move {
+            tokio::select! {
+                status = child.wait() => {
+                    let code = status.ok().and_then(|s| s.code()).unwrap_or(-1);
+                    tracing::info!("Dev server {} exited with code {}", key_owned, code);
+                    processes.remove(&key_owned);
+                }
+                _ = kill_rx.recv() => {
+                    // Kill the process group
+                    #[cfg(unix)]
+                    {
+                        unsafe {
+                            libc::kill(-(pid as i32), libc::SIGTERM);
+                        }
+                        // Give it a moment to terminate gracefully
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                        // Force kill if still alive
+                        unsafe {
+                            libc::kill(-(pid as i32), libc::SIGKILL);
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = child.kill().await;
+                    }
+                    let _ = child.wait().await;
+                    tracing::info!("Dev server {} killed", key_owned);
+                    processes.remove(&key_owned);
+                }
+            }
+        });
+
+        Ok(pid)
+    }
+
+    /// Kill a dev server process
+    pub async fn kill_devserver(&self, key: &str) -> Result<(), String> {
+        let handle = self
+            .devserver_processes
+            .get(key)
+            .ok_or(format!("No dev server running for {}", key))?;
+
+        handle
+            .kill_tx
+            .send(())
+            .await
+            .map_err(|e| format!("Failed to send kill signal: {}", e))?;
 
         Ok(())
     }
