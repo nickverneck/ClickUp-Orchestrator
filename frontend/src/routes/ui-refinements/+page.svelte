@@ -304,7 +304,7 @@
 		<!-- Main Content -->
 		<div class="flex-1 flex overflow-hidden relative">
 			{#if !branchCreated}
-				<BranchProtectionOverlay onBranchCreate={handleBranchCreate} />
+				<BranchProtectionOverlay {targetRepoPath} onBranchCreate={handleBranchCreate} />
 			{/if}
 
 			<!-- Chat Panel - Left Side -->

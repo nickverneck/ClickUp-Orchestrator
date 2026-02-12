@@ -14,7 +14,7 @@
 		}
 
 		// Ensure project is loaded when navigating to project routes
-		const id = parseInt($page.params.id, 10);
+		const id = parseInt($page.params.id ?? '', 10);
 		if (!isNaN(id) && projectStore.currentProjectId !== id) {
 			projectStore.setProjectId(id);
 		}
