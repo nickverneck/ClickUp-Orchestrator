@@ -69,6 +69,7 @@
 	let clickupStatusesError = $state<string | null>(null);
 	let activeListId = $state<string | null>(null);
 
+	let inspectorCollapsed = $state(false);
 	let canvasEl = $state<HTMLDivElement | null>(null);
 	let draggingNodeId: string | null = null;
 	let dragOffset = { x: 0, y: 0 };
@@ -1007,8 +1008,19 @@
 						</div>
 					</div>
 
-					<div class="w-full flex-shrink-0 border-t border-gray-200 bg-white p-4 lg:h-full lg:w-80 lg:border-l lg:border-t-0">
-						<h2 class="text-sm font-semibold text-gray-700">Inspector</h2>
+					<div class="relative flex-shrink-0">
+						<button
+							type="button"
+							onclick={() => inspectorCollapsed = !inspectorCollapsed}
+							class="absolute -left-7 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-l-md border border-r-0 border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+							title={inspectorCollapsed ? 'Show Inspector' : 'Hide Inspector'}
+						>
+							<svg class="h-3.5 w-3.5 transition-transform {inspectorCollapsed ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+							</svg>
+						</button>
+					<div class="border-t border-gray-200 bg-white transition-all duration-200 lg:h-full {inspectorCollapsed ? 'w-0 overflow-hidden border-t-0 p-0 lg:border-l-0' : 'w-full p-4 lg:w-80 lg:border-l'}">
+						<h2 class="text-sm font-semibold text-gray-700 whitespace-nowrap">Inspector</h2>
 						{#if selectedNode()}
 							<div class="mt-4 space-y-4 text-sm">
 								<div>
@@ -1438,6 +1450,7 @@
 						{#if error}
 							<div class="mt-6 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
 						{/if}
+					</div>
 					</div>
 				</div>
 			{/if}
